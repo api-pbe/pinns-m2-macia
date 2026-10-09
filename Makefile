@@ -1,9 +1,9 @@
 # =====================================================================
 #  PINNs for PDEs — M2 MACIA
 #  make            build every document, teacher version (with solutions)
-#  make student    build every document without solutions
+#  make handout    build every document without solutions (what you print)
 #  make notebooks  regenerate the lab notebooks from their source script
-#  make release    student PDFs + student notebook, collected in dist/
+#  make release    both variants + notebooks, collected in dist/
 #  make new-session N=03 SLUG=pinn-method   scaffold a new session
 #  make clean      remove LaTeX auxiliaries
 #  make distclean  also remove PDFs and dist/
@@ -12,11 +12,11 @@
 TEX      := pdflatex -interaction=nonstopmode -halt-on-error
 TEXINPUTS := $(CURDIR)/common:
 
-SOURCES  := $(wildcard session-*/[a-z]*.tex)
+SOURCES  := $(wildcard session-[0-9]*/[a-z]*.tex)
 PDFS     := $(SOURCES:.tex=.pdf)
-STUDENT  := $(SOURCES:.tex=-student.pdf)
+HANDOUT  := $(SOURCES:.tex=-handout.pdf)
 
-.PHONY: all student notebooks release new-session clean distclean
+.PHONY: all handout notebooks release new-session clean distclean
 
 all: $(PDFS)
 
@@ -25,30 +25,29 @@ all: $(PDFS)
 	@cd $(dir $<) && TEXINPUTS=$(TEXINPUTS) $(TEX) $(notdir $<) >/dev/null
 	@cd $(dir $<) && TEXINPUTS=$(TEXINPUTS) $(TEX) $(notdir $<) >/dev/null
 
-student: $(STUDENT)
+handout: $(HANDOUT)
 
-%-student.pdf: %.tex common/pinns-course.sty
-	@echo "  [student] $<"
-	@cd $(dir $<) && TEXINPUTS=$(TEXINPUTS) $(TEX) -jobname=$(notdir $*)-student \
-		"\def\StudentBuild{}\input{$(notdir $<)}" >/dev/null
-	@cd $(dir $<) && TEXINPUTS=$(TEXINPUTS) $(TEX) -jobname=$(notdir $*)-student \
-		"\def\StudentBuild{}\input{$(notdir $<)}" >/dev/null
+%-handout.pdf: %.tex common/pinns-course.sty
+	@echo "  [handout] $<"
+	@cd $(dir $<) && TEXINPUTS=$(TEXINPUTS) $(TEX) -jobname=$(notdir $*)-handout \
+		"\def\HandoutBuild{}\input{$(notdir $<)}" >/dev/null
+	@cd $(dir $<) && TEXINPUTS=$(TEXINPUTS) $(TEX) -jobname=$(notdir $*)-handout \
+		"\def\HandoutBuild{}\input{$(notdir $<)}" >/dev/null
 
 notebooks:
-	@for d in session-*/lab; do \
-	  [ -f $$d/build_notebooks.py ] && (cd $$d && python3 build_notebooks.py); \
+	@for d in session-[0-9]*/lab; do \
+	  if [ -f $$d/build_notebooks.py ]; then (cd $$d && python3 build_notebooks.py); fi; \
 	done
 
 # Names are prefixed by session: several sessions have a 'notes.tex', and a
 # flat copy would silently overwrite one with another.
-release: student notebooks
+release: all handout notebooks
 	@mkdir -p dist
-	@for f in session-*/*-student.pdf; do \
+	@for f in session-[0-9]*/*.pdf; do \
 	   d=$$(dirname $$f); s=$$(basename $$d | cut -d- -f1-2); \
-	   b=$$(basename $$f -student.pdf); \
-	   cp $$f dist/$$s-$$b.pdf; \
+	   cp $$f dist/$$s-$$(basename $$f); \
 	 done
-	@for f in session-*/lab/*-student.ipynb; do \
+	@for f in session-[0-9]*/lab/*.ipynb; do \
 	   [ -e $$f ] && cp $$f dist/ || true; \
 	 done
 	@echo "  -> dist/ contains:"; ls -1 dist/

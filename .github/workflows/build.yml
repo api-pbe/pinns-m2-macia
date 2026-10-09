@@ -1,10 +1,9 @@
 name: build
 
-# Private repository. Two jobs:
-#   check    — on every push: both variants must compile, nothing is published
-#   release  — on a tag v*: the STUDENT variants only are attached to a
-#              PUBLIC release, so students get exactly what you decide,
-#              when you decide it. Solutions never leave this repository.
+# Public repository. On every push both variants must compile and the committed
+# notebooks must match their generator. On a tag v*, everything is attached to a
+# release, which gives each document a permanent URL of the form
+#   https://github.com/<owner>/<repo>/releases/latest/download/session-01-notes.pdf
 
 on:
   push:
@@ -14,36 +13,45 @@ on:
   workflow_dispatch:
 
 jobs:
-  check:
+  build:
     runs-on: ubuntu-latest
     container: texlive/texlive:latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build teacher versions (with solutions)
-        run: make all
+      - name: Dependencies
+        run: apt-get update -qq && apt-get install -y -qq python3 >/dev/null
 
-      - name: Build student versions (solutions stripped)
-        run: make student
+      - name: Build every document, both variants
+        run: make all handout
 
-      - name: Fail if a student PDF still contains a solutions section
+      - name: A handout must not contain solutions
         run: |
-          for f in session-*/*-student.pdf; do
+          for f in session-[0-9]*/*-handout.pdf; do
             if pdftotext "$f" - | grep -qiE '^(Solutions|Expected results)'; then
-              echo "::error file=$f::solutions leaked into the student build"; exit 1
+              echo "::error file=$f::solutions survived in a handout"; exit 1
             fi
           done
-          echo "no solutions in any student build"
+          echo "handouts are clean"
+
+      - name: Committed notebooks must match their generator
+        run: |
+          make notebooks
+          if ! git diff --quiet -- '*.ipynb'; then
+            echo "::error::a committed notebook differs from build_notebooks.py output"
+            git diff --stat -- '*.ipynb'
+            exit 1
+          fi
+          echo "notebooks are up to date"
 
       - uses: actions/upload-artifact@v4
         with:
           name: pdfs
-          path: |
-            session-*/*.pdf
+          path: session-[0-9]*/*.pdf
           retention-days: 30
 
   release:
-    needs: check
+    needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -51,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the student bundle
+      - name: Build the bundle
         uses: addnab/docker-run-action@v3
         with:
           image: texlive/texlive:latest
@@ -60,14 +68,15 @@ jobs:
             apt-get update -qq && apt-get install -y -qq python3 >/dev/null
             make release
 
-      - name: Publish a public release with the student material only
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
           body: |
-            Student material for this milestone.
+            Each document comes in two forms:
 
-            Contains the lecture notes, problem classes and labs **without
-            solutions**, plus the lab notebooks with the gaps to fill.
-            Solutions are distributed in class.
+            * `session-NN-*.pdf` — complete, with solutions
+            * `session-NN-*-handout.pdf` — the version to print for the session
+
+            Lab notebooks are included; they also open directly in Colab from the
+            repository.

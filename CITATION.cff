@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: "Physics-Informed Neural Networks for PDEs — M2 MACIA course materials"
+message: "If you use these materials, please cite them as below."
+type: software
+authors:
+  - family-names: Boureau
+    given-names: Paul
+    affiliation: "AGM, CY Cergy Paris University"
+abstract: >-
+  Lecture notes, problem classes and computational labs for a ten-session
+  master's course on physics-informed neural networks for partial differential
+  equations. The course assumes a solid first-year master's background in
+  mathematics and no prior exposure to machine learning: the class of networks
+  is built from scratch as an object of approximation theory, and the emphasis
+  throughout is on separating what is proved from what is observed.
+keywords:
+  - physics-informed neural networks
+  - partial differential equations
+  - approximation theory
+  - numerical analysis
+  - teaching materials
+license: CC-BY-NC-SA-4.0

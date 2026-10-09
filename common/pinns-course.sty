@@ -8,7 +8,7 @@
 %           default: numbered within sections (lecture notes)
 %
 %  Solutions switch
-%    Compiling with \def\StudentBuild{} before \input sets \solutionsfalse,
+%    Compiling with \def\HandoutBuild{} before \input sets \solutionsfalse,
 %    so that  \ifsolutions ... \fi  blocks are dropped. See the Makefile.
 % =====================================================================
 \NeedsTeXFormat{LaTeX2e}
@@ -21,7 +21,7 @@
 
 % ------------------------------------------------- solutions switch
 \newif\ifsolutions
-\ifdefined\StudentBuild \solutionsfalse \else \solutionstrue \fi
+\ifdefined\HandoutBuild \solutionsfalse \else \solutionstrue \fi
 
 % ------------------------------------------------- base packages
 \RequirePackage[T1]{fontenc}
