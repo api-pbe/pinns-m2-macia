@@ -36,11 +36,30 @@ jobs:
 
       - name: Committed notebooks must match their generator
         run: |
+          # actions/checkout records safe.directory on the runner, not in this
+          # container, so git diff here can exit "not a git repository" without
+          # comparing anything. Fall back to a byte compare in that case.
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}" || true
+          snapshot() {
+            find session-[0-9]* -name '*.ipynb' -type f | sort | xargs sha256sum
+          }
+          before=$(snapshot)
           make notebooks
-          if ! git diff --quiet -- '*.ipynb'; then
-            echo "::error::a committed notebook differs from build_notebooks.py output"
-            git diff --stat -- '*.ipynb'
-            exit 1
+          if git rev-parse --is-inside-work-tree >/dev/null 2>/tmp/git-err; then
+            if ! git diff --quiet -- '*.ipynb'; then
+              echo "::error::a committed notebook differs from build_notebooks.py output"
+              git diff --stat -- '*.ipynb'
+              exit 1
+            fi
+          else
+            echo "git metadata is not usable in the job container; comparing notebook bytes"
+            cat /tmp/git-err
+            after=$(snapshot)
+            if [ "$before" != "$after" ]; then
+              echo "::error::a committed notebook differs from build_notebooks.py output"
+              printf '%s\n' "$before" "$after"
+              exit 1
+            fi
           fi
           echo "notebooks are up to date"
 
