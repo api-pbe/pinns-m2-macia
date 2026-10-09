@@ -1,0 +1,9 @@
+*.ipynb   text eol=lf
+*.tex     text eol=lf
+*.sty     text eol=lf
+*.py      text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+Makefile  text eol=lf
+*.pdf     binary
+*.png     binary
