@@ -31,6 +31,17 @@ built from scratch in Session 1, as an object of approximation theory.
 Each session directory holds its own `figures/` and, where there is a lab, a `lab/`
 with the notebook generator and the scripts that produce the figures.
 
+To start the next one:
+
+```sh
+make new-session N=03 SLUG=pinn-method
+```
+
+then delete whichever of `notes.tex`, `problem-class.tex`, `lab.tex` that session
+does not need. **Read [`docs/authoring.md`](docs/authoring.md) first** — it is the
+working method, and section 4 in particular exists because three asserted constants
+turned out to be wrong.
+
 ---
 
 ## Building
@@ -100,17 +111,48 @@ errors below `1e-8`, which single precision cannot represent.
 
 ---
 
-## Releases
+## Giving the material to students
 
-Tagging a commit `v*` triggers a public release containing **only** the student
-material: documents without solutions, and notebooks with the gaps to fill.
+This repository is private, and a release attached to a private repository is
+visible only to people who already have access to it. So publication goes through a
+**separate public repository**, which the CI fills for you.
+
+### Setup, once
+
+1. Create an empty public repository, e.g. `<you>/pinns-m2-macia-students`.
+2. Create a fine-grained personal access token with **Contents: read and write**
+   on that repository only.
+3. In *this* repository, Settings → Secrets and variables → Actions:
+   - variable `COURSE_PUBLIC_REPO` = `<you>/pinns-m2-macia-students`
+   - secret `COURSE_PUBLIC_TOKEN` = the token
+
+### Publishing a session
 
 ```sh
 git tag -a v1.0-session1 -m "Session 1: notes, problem class, lab"
 git push origin v1.0-session1
 ```
 
-Send students the release URL. Solutions stay in this repository.
+`.github/workflows/publish.yml` then builds the student variants, **refuses to
+publish if a solutions heading or a solutions notebook reached `dist/`**, and
+pushes the bundle into `materials/` of the public repository with a README
+generated from `docs/README-public.md`.
+
+Students get a stable URL, a one-click Colab link for each lab, and an issue
+tracker for corrections. Nothing from this repository is copied except `dist/`.
+
+### What to send them
+
+The public repository URL, once, at the start of term. Everything after that is
+`git pull` or a page refresh. If your institution requires the official link to
+live on the LMS, put the public repository URL there — one link that never goes
+stale, instead of re-uploading PDFs after every correction.
+
+### Solutions
+
+They are never published. Distribute them in class, or tag a second, private
+release if you want them downloadable. `make all` gives you the teacher PDFs,
+`make release` the student bundle; both come from the same sources.
 
 ---
 

@@ -4,6 +4,7 @@
 #  make student    build every document without solutions
 #  make notebooks  regenerate the lab notebooks from their source script
 #  make release    student PDFs + student notebook, collected in dist/
+#  make new-session N=03 SLUG=pinn-method   scaffold a new session
 #  make clean      remove LaTeX auxiliaries
 #  make distclean  also remove PDFs and dist/
 # =====================================================================
@@ -15,7 +16,7 @@ SOURCES  := $(wildcard session-*/[a-z]*.tex)
 PDFS     := $(SOURCES:.tex=.pdf)
 STUDENT  := $(SOURCES:.tex=-student.pdf)
 
-.PHONY: all student notebooks release clean distclean
+.PHONY: all student notebooks release new-session clean distclean
 
 all: $(PDFS)
 
@@ -51,6 +52,15 @@ release: student notebooks
 	   [ -e $$f ] && cp $$f dist/ || true; \
 	 done
 	@echo "  -> dist/ contains:"; ls -1 dist/
+
+new-session:
+	@test -n "$(N)"    || { echo "usage: make new-session N=03 SLUG=pinn-method"; exit 1; }
+	@test -n "$(SLUG)" || { echo "usage: make new-session N=03 SLUG=pinn-method"; exit 1; }
+	@test ! -d session-$(N)-$(SLUG) || { echo "session-$(N)-$(SLUG) already exists"; exit 1; }
+	@cp -r session-template session-$(N)-$(SLUG)
+	@sed -i.bak 's/@N@/$(N)/g' session-$(N)-$(SLUG)/*.tex && rm -f session-$(N)-$(SLUG)/*.bak
+	@echo "  created session-$(N)-$(SLUG)"
+	@echo "  keep only the documents this session needs — see docs/authoring.md, section 1"
 
 clean:
 	@find . \( -name '*.aux' -o -name '*.log' -o -name '*.out' -o -name '*.toc' \
