@@ -38,10 +38,18 @@ notebooks:
 	  [ -f $$d/build_notebooks.py ] && (cd $$d && python3 build_notebooks.py); \
 	done
 
+# Names are prefixed by session: several sessions have a 'notes.tex', and a
+# flat copy would silently overwrite one with another.
 release: student notebooks
 	@mkdir -p dist
-	@cp session-*/*-student.pdf dist/ 2>/dev/null || true
-	@cp session-*/lab/*-student.ipynb dist/ 2>/dev/null || true
+	@for f in session-*/*-student.pdf; do \
+	   d=$$(dirname $$f); s=$$(basename $$d | cut -d- -f1-2); \
+	   b=$$(basename $$f -student.pdf); \
+	   cp $$f dist/$$s-$$b.pdf; \
+	 done
+	@for f in session-*/lab/*-student.ipynb; do \
+	   [ -e $$f ] && cp $$f dist/ || true; \
+	 done
 	@echo "  -> dist/ contains:"; ls -1 dist/
 
 clean:
