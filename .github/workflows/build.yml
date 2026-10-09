@@ -1,0 +1,73 @@
+name: build
+
+# Private repository. Two jobs:
+#   check    — on every push: both variants must compile, nothing is published
+#   release  — on a tag v*: the STUDENT variants only are attached to a
+#              PUBLIC release, so students get exactly what you decide,
+#              when you decide it. Solutions never leave this repository.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container: texlive/texlive:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build teacher versions (with solutions)
+        run: make all
+
+      - name: Build student versions (solutions stripped)
+        run: make student
+
+      - name: Fail if a student PDF still contains a solutions section
+        run: |
+          for f in session-*/*-student.pdf; do
+            if pdftotext "$f" - | grep -qiE '^(Solutions|Expected results)'; then
+              echo "::error file=$f::solutions leaked into the student build"; exit 1
+            fi
+          done
+          echo "no solutions in any student build"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdfs
+          path: |
+            session-*/*.pdf
+          retention-days: 30
+
+  release:
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the student bundle
+        uses: addnab/docker-run-action@v3
+        with:
+          image: texlive/texlive:latest
+          options: -v ${{ github.workspace }}:/w -w /w
+          run: |
+            apt-get update -qq && apt-get install -y -qq python3 >/dev/null
+            make release
+
+      - name: Publish a public release with the student material only
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            Student material for this milestone.
+
+            Contains the lecture notes, problem classes and labs **without
+            solutions**, plus the lab notebooks with the gaps to fill.
+            Solutions are distributed in class.

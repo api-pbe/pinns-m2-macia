@@ -1,0 +1,27 @@
+# LaTeX auxiliaries
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+
+# Built documents — the CI builds them, see .github/workflows/build.yml
+*.pdf
+dist/
+
+# Generated notebooks — regenerate with `make notebooks`
+**/lab/*-student.ipynb
+**/lab/*-solutions.ipynb
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# OS
+.DS_Store

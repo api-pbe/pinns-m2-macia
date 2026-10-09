@@ -1,0 +1,1107 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{pinns-course}
+
+\coursemeta{Session 2 --- Automatic differentiation and nonconvex optimisation}{Session 2}{PINNs, PDEs, automatic differentiation, adjoint mode, nonconvex optimisation, L-BFGS, M2 MACIA, AGM, CY Cergy Paris University}
+
+% ================================================================
+\begin{document}
+
+\coursetitle{Session 2}{Automatic differentiation\\[3pt] and nonconvex optimisation}{}
+
+\vspace{6pt}
+
+\begin{keybox}
+\textbf{Prerequisites.} Session 1. Multivariable calculus and the chain rule, elementary numerical
+analysis (floating-point arithmetic), elementary probability. \emph{No prior exposure to machine
+learning is assumed.}
+
+\smallskip
+The problem set (§\,7) is designed to be worked through independently; full solutions are in §\,8.
+\end{keybox}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ================================================================
+\section{What has to be differentiated}
+
+Session 1 studied the class $\Nn^\sigma_{L,W}$ as a set of functions and asked what it can
+approximate. Every theorem there was \emph{existential}: Cybenko's theorem produces no network,
+Barron's theorem produces no algorithm. This session is about the machinery that turns those
+existence statements into a computation, and about how much of that computation is under
+mathematical control. The answer will be lopsided: the differentiation is essentially a solved
+problem, with theorems; the optimisation is not.
+
+\subsection{The two differentiation problems}
+
+Fix a PDE $\Dd[u] = f$ in $\Omega \subset \R^d$ with boundary operator $\Bb$, a network
+$\Phi_\theta$ with $\theta \in \R^P$, collocation points $x_1,\dots,x_N \in \Omega$ and boundary
+points $y_1,\dots,y_{N_b} \in \partial\Omega$. The PINN functional of Session 3 will be
+\begin{equation}\label{eq:pinn}
+J(\theta) \;=\; \frac1N \sum_{i=1}^N \big| \Rr(\Phi_\theta)(x_i) \big|^2
+\;+\; \frac{\lambda}{N_b} \sum_{j=1}^{N_b} \big| \Bb\Phi_\theta(y_j) - g(y_j) \big|^2,
+\qquad \Rr(v) = \Dd[v] - f .
+\end{equation}
+Evaluating and minimising \eqref{eq:pinn} requires two different derivatives, and confusing them is
+the most common source of confusion in this subject.
+
+\begin{keybox}
+\textbf{Derivatives in $x$.} To form the residual $\Rr(\Phi_\theta)(x_i)$ one needs
+$\partial^\alpha_x \Phi_\theta(x_i)$ for $\abs{\alpha} \le m$, where $m$ is the order of $\Dd$.
+These are derivatives of the network with respect to its \emph{input}. They enter the definition of
+the objective.
+
+\smallskip
+\textbf{Derivatives in $\theta$.} To run any first-order optimiser one needs $\nabla_\theta J$.
+These are derivatives with respect to the \emph{parameters}, of a quantity that itself already
+contains $x$-derivatives. They enter the minimisation.
+\end{keybox}
+
+\begin{remark}[What is genuinely new here]
+In a finite element or finite difference method the differential operator is \emph{discretised}: one
+replaces $\partial_{xx}u$ by a difference quotient or by the action of a stiffness matrix, and the
+consistency error of that replacement is part of the method's error analysis. In a PINN,
+$\partial_{xx}\Phi_\theta(x_i)$ is computed \emph{exactly}, to machine precision, with no
+discretisation and no mesh. That is a real gain, and §\,2.5 quantifies it. It is also the entire
+reason the cost analysis of §\,5 looks the way it does.
+\end{remark}
+
+% ================================================================
+\section{Automatic differentiation}
+
+\subsection{Straight-line programs}
+
+Automatic differentiation --- AD --- is neither symbolic differentiation nor numerical
+differentiation. It is the observation that the chain rule can be applied to a \emph{program} rather
+than to a formula.
+
+\begin{definition}[Evaluation trace]\label{def:trace}
+Let $F : \R^{n} \to \R^{m}$ be given as a composition
+\[
+F = f_L \circ f_{L-1} \circ \cdots \circ f_1,
+\qquad f_\ell : \R^{n_{\ell-1}} \to \R^{n_\ell},\quad n_0 = n,\ n_L = m,
+\]
+where each $f_\ell$ is differentiable and its Jacobian is available in closed form. Given
+$x \in \R^n$, the \kw{evaluation trace} is the sequence
+\[
+z_0 := x, \qquad z_\ell := f_\ell(z_{\ell-1}) \quad (\ell = 1,\dots,L), \qquad F(x) = z_L .
+\]
+\end{definition}
+
+A network of Definition 1.1 of Session 1 is exactly of this form: $f_\ell$ alternates between the
+affine maps $A_\ell$ and the componentwise activation $\sigma$. Nothing below uses more than this
+layered structure; the general case, in which the program is an arbitrary directed acyclic graph of
+elementary operations, is discussed in Remark \ref{rem:general-graph}.
+
+We write $\cost(f)$ for the number of arithmetic operations used to evaluate $f$, and we assume
+throughout that each elementary Jacobian--vector or vector--Jacobian product costs at most a fixed
+multiple of $\cost(f_\ell)$. For the two building blocks of a network this is immediate: for an
+affine map $A(z) = Wz + b$ both products are one matrix--vector multiplication, and for a
+componentwise activation both are one componentwise multiplication.
+
+\begin{center}
+\begin{tikzpicture}[
+  scale=0.95, transform shape,
+  box/.style={draw=coursgrey, fill=coursbg, minimum width=1.25cm, minimum height=0.62cm,
+              inner sep=2pt, font=\small},
+  fwd/.style={-{Latex[length=4pt]}, draw=coursteal, thick},
+  rev/.style={-{Latex[length=4pt]}, draw=courswine, thick},
+  lbl/.style={font=\scriptsize, text=coursgrey}
+]
+\node[box] (z0) at (0,0) {$z_0$};
+\node[box] (z1) at (2.6,0) {$z_1$};
+\node[box] (z2) at (5.2,0) {$z_2$};
+\node[box] (z3) at (7.8,0) {$z_3$};
+\foreach \a/\b/\n in {z0/z1/1, z1/z2/2, z2/z3/3}
+  \draw[fwd] (\a) -- node[above, lbl, text=coursteal] {$f_{\n}$} (\b);
+\node[lbl, below=14pt of z0] (v0) {$v_0 = v$};
+\node[lbl, below=14pt of z3] (v3) {$v_3 = DF(x)\,v$};
+\draw[fwd, dashed] (v0) -- node[below, lbl, text=coursteal]
+   {\ tangents propagate forward: $v_\ell = Df_\ell(z_{\ell-1})\,v_{\ell-1}$\ } (v3);
+\node[lbl, above=14pt of z3] (w3) {$w_3 = w$};
+\node[lbl, above=14pt of z0] (w0) {$w_0 = DF(x)^{\!\top} w$};
+\draw[rev, dashed] (w3) -- node[above, lbl, text=courswine]
+   {\ adjoints propagate backward: $w_{\ell-1} = Df_\ell(z_{\ell-1})^{\!\top} w_\ell$\ } (w0);
+\end{tikzpicture}
+\end{center}
+
+\subsection{Forward mode}
+
+\begin{definition}[Forward sweep]\label{def:forward}
+Given $x$ and a direction $v \in \R^n$, the \kw{forward} (or tangent) sweep computes, alongside the
+evaluation trace,
+\[
+v_0 := v, \qquad v_\ell := Df_\ell(z_{\ell-1})\, v_{\ell-1} \quad (\ell = 1,\dots,L).
+\]
+\end{definition}
+
+\begin{proposition}[Correctness and cost of forward mode]\label{prop:forward}
+With the notation above, $v_L = DF(x)\,v$, and the forward sweep costs at most a fixed multiple of
+$\cost(F)$, with memory $O(\max_\ell n_\ell)$.
+\end{proposition}
+
+\begin{proof}
+Correctness is the chain rule and an induction on $\ell$. Write $F_\ell := f_\ell \circ \cdots \circ f_1$,
+so $z_\ell = F_\ell(x)$. The claim is $v_\ell = DF_\ell(x)v$. For $\ell = 0$ it is the initialisation.
+If it holds at $\ell-1$, the chain rule gives
+$DF_\ell(x) = Df_\ell(F_{\ell-1}(x))\, DF_{\ell-1}(x) = Df_\ell(z_{\ell-1})\, DF_{\ell-1}(x)$,
+hence $DF_\ell(x)v = Df_\ell(z_{\ell-1})\,v_{\ell-1} = v_\ell$. Taking $\ell = L$ gives the claim.
+
+For the cost: step $\ell$ evaluates $f_\ell$ and one Jacobian--vector product, by assumption at most
+a fixed multiple of $\cost(f_\ell)$; summing over $\ell$ gives the bound. Only $z_{\ell-1}$ and
+$v_{\ell-1}$ are needed to produce $z_\ell$ and $v_\ell$, so nothing has to be stored.
+\end{proof}
+
+To obtain the full Jacobian $DF(x) \in \R^{m \times n}$ one runs the sweep with $v = e_1,\dots,e_n$:
+$n$ sweeps. Forward mode is therefore efficient when $n$ is small.
+
+\begin{remark}[Dual numbers]\label{rem:dual}
+Forward mode has a compact algebraic description. Let $\R[\varepsilon] := \R[X]/(X^2)$ be the ring
+of \kw{dual numbers}, whose elements are written $a + b\varepsilon$ with $\varepsilon^2 = 0$. For
+$f$ differentiable at $a$, define the lift
+\[
+\widehat f(a + b\varepsilon) := f(a) + b\, f'(a)\, \varepsilon .
+\]
+Then the lift is compatible with the three ways of building programs:
+\[
+\widehat{f+g} = \widehat f + \widehat g, \qquad
+\widehat{fg} = \widehat f\ \widehat g, \qquad
+\widehat{g \circ f} = \widehat g \circ \widehat f ,
+\]
+the first two by the corresponding derivative rules together with $\varepsilon^2 = 0$, the third by
+the chain rule (Exercise \ref{ex:dual}). Consequently, running an \emph{unmodified} program on dual
+numbers, with $x$ replaced by $x + v\varepsilon$, returns $F(x) + DF(x)v\,\varepsilon$. This is not
+a metaphor: it is how forward-mode libraries are implemented, by overloading arithmetic on a
+two-component type.
+\end{remark}
+
+\subsection{Reverse mode}
+
+\begin{definition}[Reverse sweep]\label{def:reverse}
+Given $x$, first run the evaluation trace and \emph{store} $z_0,\dots,z_{L-1}$. Then, given
+$w \in \R^m$, the \kw{reverse} (or adjoint) sweep computes
+\[
+w_L := w, \qquad w_{\ell-1} := Df_\ell(z_{\ell-1})^{\!\top}\, w_\ell \quad (\ell = L,\dots,1).
+\]
+\end{definition}
+
+\begin{proposition}[Correctness and cost of reverse mode]\label{prop:reverse}
+With the notation above, $w_0 = DF(x)^{\!\top} w$. The two sweeps together cost at most a fixed
+multiple of $\cost(F)$, but require memory $O\big(\sum_{\ell} n_\ell\big)$ --- the whole trace.
+\end{proposition}
+
+\begin{proof}
+Let $G_\ell := f_L \circ \cdots \circ f_{\ell+1}$, so that $F = G_\ell \circ F_\ell$ and
+$G_L = \mathrm{id}$. We prove $w_\ell = DG_\ell(z_\ell)^{\!\top} w$ by downward induction on $\ell$.
+At $\ell = L$ this is the initialisation. Assume it at $\ell$. Since
+$G_{\ell-1} = G_\ell \circ f_\ell$, the chain rule gives
+$DG_{\ell-1}(z_{\ell-1}) = DG_\ell(z_\ell)\, Df_\ell(z_{\ell-1})$, and transposing,
+\[
+DG_{\ell-1}(z_{\ell-1})^{\!\top} w
+= Df_\ell(z_{\ell-1})^{\!\top} DG_\ell(z_\ell)^{\!\top} w
+= Df_\ell(z_{\ell-1})^{\!\top} w_\ell = w_{\ell-1}.
+\]
+At $\ell = 0$, $G_0 = F$ and $z_0 = x$, giving the claim.
+
+The cost bound is as in Proposition \ref{prop:forward}, with vector--Jacobian products in place of
+Jacobian--vector products, plus the forward evaluation. The memory statement is forced: computing
+$w_{\ell-1}$ requires $Df_\ell(z_{\ell-1})$, hence $z_{\ell-1}$, and the $z$'s are produced in the
+opposite order to the one in which they are consumed.
+\end{proof}
+
+To obtain the full Jacobian one runs the reverse sweep with $w = e_1,\dots,e_m$: $m$ sweeps. Reverse
+mode is therefore efficient when $m$ is small --- and the case $m = 1$, a scalar objective, is
+exactly the one that matters for optimisation.
+
+\begin{keybox}
+\textbf{The rule of thumb, and it is a theorem, not a heuristic.} For $F : \R^n \to \R^m$:
+forward mode gives the full Jacobian in $O(n)$ sweeps, reverse mode in $O(m)$ sweeps, each sweep
+costing $O(\cost(F))$. For $J : \R^P \to \R$ with $P$ in the thousands, reverse mode computes
+$\nabla_\theta J$ in the cost of a few evaluations of $J$, and forward mode would need $P$ of them.
+Reverse mode buys this with memory: it stores the entire trace.
+\end{keybox}
+
+\begin{remark}[General programs]\label{rem:general-graph}
+Definition \ref{def:trace} assumed a chain. A real program is a directed acyclic graph of elementary
+operations, in which an intermediate value may be used several times. The only change is
+bookkeeping: an adjoint is \emph{accumulated} over all the uses of a variable, which is the
+transposed statement of the fact that a value fanning out contributes several terms to the chain
+rule. Propositions \ref{prop:forward} and \ref{prop:reverse} hold verbatim in that setting; see
+Griewank and Walther (2008), Ch.~3--4.
+\end{remark}
+
+\subsection{The cheap-gradient principle}
+
+Proposition \ref{prop:reverse} says the gradient of a scalar function costs a constant times the
+function. It is worth recording that this is a general theorem about computation, not an artefact of
+the layered structure.
+
+\begin{theorem}[Baur--Strassen, 1983]\label{th:baur}
+Let $f : \R^n \to \R$ be a rational function computed by a straight-line program using $c$
+arithmetic operations. Then $f$ together with all $n$ partial derivatives
+$\partial_1 f, \dots, \partial_n f$ can be computed by a straight-line program using $O(c)$
+arithmetic operations, with an absolute constant independent of $n$ and of $f$.
+\end{theorem}
+
+\begin{remark}[On the constant, and on what to quote]
+The value of the constant depends on the operation-counting convention (whether additions and
+multiplications are weighted equally, whether the evaluation of $f$ itself is counted); small
+constants between $3$ and $5$ appear in the literature, and Morgenstern (1985) gives a refinement.
+The mathematically robust content --- and the only part worth stating in a lecture --- is that the
+constant \emph{does not grow with $n$}. That is the surprising part: naively one would expect
+computing $n$ partial derivatives to cost $n$ times the function.
+\end{remark}
+
+\subsection{Automatic differentiation is not finite differences}
+
+Students meeting AD often suspect it of being a well-organised difference quotient. It is not, and
+the difference is quantitative. The following proposition is elementary but should be done in full,
+because the resulting numbers govern what is feasible in a PINN.
+
+We use the standard floating-point model: an evaluated value $\fl(f(x))$ satisfies
+$\abs{\fl(f(x)) - f(x)} \le \varepsilon_{\!M}\, M_0$ with $M_0$ a bound for $\abs f$ near $x$ and
+$\varepsilon_{\!M}$ the unit roundoff ($\varepsilon_{\!M} \approx 1.1\cdot 10^{-16}$ in double
+precision, $\approx 6\cdot 10^{-8}$ in single precision).
+
+\begin{proposition}[The finite-difference barrier]\label{prop:fd}
+Let $f$ be $C^4$ near $x$, and let $M_k$ bound $\abs{f^{(k)}}$ near $x$. In the model above, the
+computed central differences
+\[
+D_h^{(1)} f := \frac{f(x+h) - f(x-h)}{2h},
+\qquad
+D_h^{(2)} f := \frac{f(x+h) - 2f(x) + f(x-h)}{h^2}
+\]
+satisfy
+\[
+\abs{D_h^{(1)} f - f'(x)} \;\le\; \frac{h^2}{6}M_3 + \frac{\varepsilon_{\!M} M_0}{h},
+\qquad
+\abs{D_h^{(2)} f - f''(x)} \;\le\; \frac{h^2}{12}M_4 + \frac{4\varepsilon_{\!M} M_0}{h^2}.
+\]
+Optimising in $h$ gives, for absolute constants depending only on the $M_k$,
+\[
+\min_h \abs{D_h^{(1)} f - f'(x)} = O\big(\varepsilon_{\!M}^{2/3}\big) \ \text{ at } \ h \asymp \varepsilon_{\!M}^{1/3},
+\qquad
+\min_h \abs{D_h^{(2)} f - f''(x)} = O\big(\varepsilon_{\!M}^{1/2}\big) \ \text{ at } \ h \asymp \varepsilon_{\!M}^{1/4}.
+\]
+\end{proposition}
+
+\begin{proof}
+Taylor with Lagrange remainder gives
+$f(x \pm h) = f(x) \pm hf'(x) + \tfrac{h^2}{2}f''(x) \pm \tfrac{h^3}{6}f'''(\xi_\pm)$, whence
+$D_h^{(1)}f - f'(x) = \tfrac{h^2}{12}(f'''(\xi_+) + f'''(\xi_-))$ in exact arithmetic, bounded by
+$\tfrac{h^2}{6}M_3$. Each of the two evaluated values carries an error at most
+$\varepsilon_{\!M}M_0$, and they are divided by $2h$, contributing at most
+$2\varepsilon_{\!M}M_0/(2h) = \varepsilon_{\!M}M_0/h$. Adding gives the first bound. Minimising
+$h \mapsto \tfrac{M_3}{6}h^2 + \varepsilon_{\!M}M_0 h^{-1}$ gives
+$h^3 = 3\varepsilon_{\!M}M_0/M_3$ and a minimum of order $\varepsilon_{\!M}^{2/3}$.
+
+For the second difference, Taylor to order four gives
+$D_h^{(2)}f - f''(x) = \tfrac{h^2}{24}(f^{(4)}(\xi_+) + f^{(4)}(\xi_-))$, bounded by
+$\tfrac{h^2}{12}M_4$; the three evaluated values contribute at most
+$4\varepsilon_{\!M}M_0/h^2$. Minimising $h \mapsto \tfrac{M_4}{12}h^2 + 4\varepsilon_{\!M}M_0h^{-2}$
+gives $h^4 = 48\varepsilon_{\!M}M_0/M_4$ and a minimum of order $\varepsilon_{\!M}^{1/2}$.
+\end{proof}
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+  width=13.2cm, height=6.2cm,
+  xlabel={$\log_{10} h$}, ylabel={$\log_{10}$ relative error},
+  xmin=-9.2, xmax=-0.3, ymin=-11.4, ymax=1.2,
+  axis lines=left, axis line style={color=coursgrey},
+  label style={font=\scriptsize, color=coursgrey},
+  tick label style={font=\scriptsize, color=coursgrey},
+  xtick={-9,-8,-7,-6,-5,-4,-3,-2,-1}, ytick={0,-2,-4,-6,-8,-10},
+  grid=major, grid style={draw=coursgrey!18},
+  legend style={font=\scriptsize, draw=none, fill=none, at={(0.02,0.03)}, anchor=south west},
+  legend cell align=left
+]
+\addplot[coursteal, thick, mark=none] coordinates {
+(-0.50,-0.172) (-0.75,-0.715) (-1.00,-1.230) (-1.25,-1.734) (-1.50,-2.236) (-1.75,-2.736)
+(-2.00,-3.236) (-2.25,-3.736) (-2.50,-4.236) (-2.75,-4.736) (-3.00,-5.236) (-3.25,-5.736)
+(-3.50,-6.236) (-3.75,-6.736) (-4.00,-7.236) (-4.25,-7.737) (-4.50,-8.237) (-4.75,-8.736)
+(-5.00,-9.238) (-5.25,-10.000) (-5.50,-10.445) (-5.75,-10.141) (-6.00,-9.733) (-6.25,-9.258)
+(-6.50,-8.955) (-6.75,-8.703) (-7.00,-9.179) (-7.25,-8.018) (-7.50,-7.692) (-7.75,-8.122)
+(-8.00,-8.107) (-8.25,-7.261) (-8.50,-8.189) (-8.75,-6.988) (-9.00,-6.791)};
+\addlegendentry{central difference for $f'$}
+\addplot[courswine, thick, mark=none] coordinates {
+(-0.50,-0.517) (-0.75,-1.040) (-1.00,-1.549) (-1.25,-2.051) (-1.50,-2.552) (-1.75,-3.052)
+(-2.00,-3.552) (-2.25,-4.052) (-2.50,-4.552) (-2.75,-5.052) (-3.00,-5.552) (-3.25,-6.052)
+(-3.50,-6.552) (-3.75,-7.057) (-4.00,-8.508) (-4.25,-7.320) (-4.50,-6.855) (-4.75,-6.877)
+(-5.00,-5.567) (-5.25,-5.208) (-5.50,-5.254) (-5.75,-4.158) (-6.00,-3.752) (-6.25,-3.214)
+(-6.50,-3.964) (-6.75,-2.219) (-7.00,-3.964) (-7.25,-2.219) (-7.50,-0.845) (-7.75,0.000)
+(-8.00,0.000) (-8.25,0.000) (-8.50,1.471) (-8.75,0.000) (-9.00,0.000)};
+\addlegendentry{central difference for $f''$}
+\addplot[coursochre, thick, densely dashed, mark=none] coordinates {(-9.2,-10.9) (-0.3,-10.9)};
+\addlegendentry{order of the relative error of AD}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent
+{\small The two V-shapes for $f(x) = \tanh(3x + \tfrac12)$ at $x = 0.7$, in double precision. The
+first derivative bottoms out near $h = 10^{-5.5}$ at a relative error around $10^{-10}$; the second
+derivative bottoms out much earlier, near $h = 10^{-4}$, at around $10^{-8.5}$, and has lost all
+significant digits by $h = 10^{-7.5}$. Automatic differentiation sits at the level of the dashed
+line, at all orders, with no parameter to tune. In single precision --- the working precision of
+much GPU code --- the second-derivative floor rises to roughly $2\cdot 10^{-4}$.}
+
+\begin{keyboxwine}
+\textbf{Why this matters for the rest of the course.} A PINN residual for a second-order operator
+needs $\partial_{xx}\Phi_\theta$. Proposition \ref{prop:fd} says that a difference quotient could
+deliver that quantity to about $8$ significant digits in double precision at best, with a step size
+that has to be tuned and that depends on the unknown $M_4$ --- and to about $3$ digits in single
+precision. AD delivers it to full precision with no step size at all. \emph{This is the single
+technical fact that makes the PINN formulation practical}, and it is the reason the method appeared
+when it did rather than in 1998.
+\end{keyboxwine}
+
+\begin{remark}[What AD is not]
+AD is also not symbolic differentiation. A symbolic differentiator applied to a deep composition
+produces an expression whose size can grow exponentially with depth --- the usual expression-swell
+phenomenon --- whereas AD produces a \emph{program} whose length is proportional to the original.
+The three notions are genuinely distinct: symbolic manipulates expressions, numerical perturbs
+inputs, AD transforms programs.
+\end{remark}
+
+\subsection{Derivatives in $x$: the cost of a Laplacian}
+
+We now return to the quantity a PINN actually needs. Let $\Phi_\theta : \R^d \to \R$ and let
+$H(x) := \nabla^2_x \Phi_\theta(x) \in \R^{d\times d}$ be its spatial Hessian.
+
+\begin{proposition}[Hessian--vector products are cheap; the Hessian is not]\label{prop:hvp}
+For any $v \in \R^d$, the product $H(x)v$ can be computed at cost $O(\cost(\Phi_\theta))$, by
+applying a forward sweep to the function $x \mapsto \nabla_x \Phi_\theta(x)$ obtained from a reverse
+sweep --- ``forward over reverse''. Consequently
+\[
+\Delta_x \Phi_\theta(x) = \tr H(x) = \sum_{i=1}^d e_i^{\!\top} H(x)\, e_i
+\]
+is obtained in $d$ such products, at total cost $O\big(d \cdot \cost(\Phi_\theta)\big)$.
+\end{proposition}
+
+\begin{proof}
+By Proposition \ref{prop:reverse} applied to $\Phi_\theta$ with $w = 1$, the map
+$G : x \mapsto \nabla_x\Phi_\theta(x)$ is computed by a program of length $O(\cost(\Phi_\theta))$.
+By Proposition \ref{prop:forward} applied to $G$, the product $DG(x)v = H(x)v$ costs
+$O(\cost(G)) = O(\cost(\Phi_\theta))$. Summing the $d$ diagonal entries gives the trace.
+\end{proof}
+
+\begin{keybox}
+\textbf{The practical obstacle, stated plainly.} Evaluating the residual of a second-order PDE at
+one collocation point costs $O(d)$ network evaluations, not $O(1)$. In $d = 2$ or $3$ this is
+irrelevant. In $d = 100$ --- exactly the regime where Session 4 will argue that networks have a
+theoretical advantage --- it is a factor of $100$ on every residual evaluation, at every step, for
+every collocation point. The obstacle is not the approximation theory; it is the trace.
+\end{keybox}
+
+There is a standard way to trade that factor for randomness, and it is worth stating precisely
+because it is a genuinely used technique and because its proof is two lines.
+
+\begin{lemma}[Hutchinson's estimator]\label{lem:hutchinson}
+Let $A \in \R^{d\times d}$ and let $v$ be a random vector with $\E[vv^{\!\top}] = I_d$. Then
+\[
+\E\big[ v^{\!\top} A v \big] = \tr A .
+\]
+If moreover $A$ is symmetric and $v$ has independent Rademacher coordinates
+($\Prob(v_i = \pm 1) = \tfrac12$), then
+\[
+\Var\big( v^{\!\top} A v \big) = 2 \Big( \norm{A}_F^2 - \sum_{i=1}^d A_{ii}^2 \Big).
+\]
+\end{lemma}
+
+\begin{proof}
+For the mean, $v^{\!\top}Av = \tr(A v v^{\!\top})$ by cyclicity, and the trace is linear, so
+$\E[v^{\!\top}Av] = \tr\big(A\,\E[vv^{\!\top}]\big) = \tr A$.
+
+For the variance with Rademacher coordinates, $v_i^2 = 1$ almost surely, so
+$v^{\!\top}Av = \sum_i A_{ii} + \sum_{i \ne j} A_{ij} v_i v_j$; the first sum is deterministic.
+For $i \ne j$ and $k \ne l$ one has $\E[v_iv_jv_kv_l] = 1$ if $\{i,j\} = \{k,l\}$ and $0$ otherwise,
+since otherwise some index appears an odd number of times and independence with $\E[v_i] = 0$ kills
+the term. Hence
+\[
+\Var\big(v^{\!\top}Av\big) = \sum_{i \ne j}\sum_{k \ne l} A_{ij}A_{kl}\,\E[v_iv_jv_kv_l]
+= \sum_{i\ne j} \big( A_{ij}^2 + A_{ij}A_{ji} \big) = 2\sum_{i \ne j} A_{ij}^2,
+\]
+using $A_{ij} = A_{ji}$, and $\sum_{i\ne j}A_{ij}^2 = \norm{A}_F^2 - \sum_i A_{ii}^2$.
+\end{proof}
+
+\begin{remark}[How to read the variance, and how not to]
+Lemma \ref{lem:hutchinson} replaces $d$ Hessian--vector products by one, at the price of an unbiased
+but noisy estimate; averaging $K$ independent draws divides the variance by $K$. Two honest
+caveats. First, the variance is controlled by the \emph{off-diagonal} mass of $H$, so the estimator
+is good exactly when the Hessian is nearly diagonal and poor when it is not --- and one does not
+know in advance which case one is in. Second, replacing $\Delta\Phi_\theta$ by an unbiased estimate
+changes the objective: one is then minimising a stochastic functional, and the gradient estimate
+acquires a variance that the optimiser must absorb. This is a real technique with a real cost, not a
+free lunch; the literature on it is recent and its analysis in the PINN setting is not settled.
+\end{remark}
+
+\subsection{Nonsmooth activations: what a library actually returns}
+
+Session 1, Proposition 1.8, showed that a ReLU network is piecewise affine, so that its second
+distributional derivative is a measure. We noted there that an AD library nevertheless returns a
+number. It is worth saying precisely what that number is.
+
+At a point where the program is differentiable, AD returns the derivative --- this is
+Propositions \ref{prop:forward} and \ref{prop:reverse}. At a point of nondifferentiability, a
+library evaluates $\ReLU'(0)$ by a convention (typically $0$), and propagates it. The resulting
+object is not the derivative, and it need not even be a subgradient of the composite function.
+
+\begin{theorem}[Bolte and Pauwels, 2021 --- informal statement]\label{th:bolte}
+For programs built from elementary functions that are locally Lipschitz and definable in an
+o-minimal structure --- which covers $\ReLU$, $\tanh$, $\max$, and the compositions used in
+practice --- the output of reverse-mode AD is a \emph{conservative field} for the function computed
+by the program. In particular it coincides with the gradient at Lebesgue-almost every point, and
+gradient-type methods driven by it converge to the appropriate stationary points under the usual
+step-size conditions.
+\end{theorem}
+
+\begin{remark}
+The statement is quoted for orientation, not used below; the precise definitions and hypotheses are
+in the cited paper. Two things are worth retaining. First, ``AD returns the gradient almost
+everywhere'' is a theorem, not an assumption, and it is what licenses the everyday use of ReLU
+networks. Second, it says nothing at all about the second derivative, which is precisely the object
+a PINN needs --- and which, by Session 1, does not exist as a function. The almost-everywhere
+statement rescues first-order training of ReLU networks; it does not rescue the ReLU PINN residual.
+\end{remark}
+
+% ================================================================
+\section{The optimisation problem}
+
+\subsection{What is being minimised}
+
+Once the collocation points in \eqref{eq:pinn} are fixed, $J : \R^P \to \R$ is a deterministic
+function, smooth as soon as $\sigma$ is smooth enough (Session 1, Proposition 1.4). Three of its
+features are settled before any algorithm is chosen.
+
+\begin{itemize}
+\item \textbf{It is a sum of squares.} Writing $r_k(\theta)$ for the $N + N_b$ individual residuals
+(interior and boundary, the latter weighted by $\sqrt\lambda$), we have
+$J(\theta) = \frac1N\sum_k r_k(\theta)^2$ up to the normalisations. This structure is exploited in
+§\,3.4.
+\item \textbf{It is not convex.} By Session 1, Exercise 2.4, the loss can fail to be convex in
+$\theta$ even for a target that is analytic and exactly representable. Nonconvexity is therefore
+not an artefact of a hard PDE; it is present in the simplest possible case.
+\item \textbf{Its minimum need not be attained.} By Session 1, Remark 1.7, fixed-size network classes
+need not be closed, so $\inf_\theta J$ may fail to be attained, with minimising sequences whose
+parameters diverge.
+\end{itemize}
+
+\subsection{Gradient descent: what is provable}
+
+The following is the basic --- and essentially the only unconditional --- guarantee available for
+smooth nonconvex minimisation. It is worth proving in full precisely because of how little it says.
+
+\begin{lemma}[Descent lemma]\label{lem:descent}
+Let $J : \R^P \to \R$ be differentiable with $\nabla J$ Lipschitz of constant $L$. Then for all
+$\theta, \theta' \in \R^P$,
+\[
+J(\theta') \;\le\; J(\theta) + \scal{\nabla J(\theta)}{\theta' - \theta} + \frac{L}{2}\norm{\theta' - \theta}^2 .
+\]
+\end{lemma}
+
+\begin{proof}
+Set $\varphi(t) := J(\theta + t(\theta'-\theta))$ for $t \in [0,1]$. Then $\varphi$ is
+differentiable with $\varphi'(t) = \scal{\nabla J(\theta + t(\theta'-\theta))}{\theta'-\theta}$, and
+\[
+J(\theta') - J(\theta) = \int_0^1 \varphi'(t)\,\dd t
+= \scal{\nabla J(\theta)}{\theta'-\theta}
++ \int_0^1 \scal{\nabla J(\theta + t(\theta'-\theta)) - \nabla J(\theta)}{\theta'-\theta}\,\dd t .
+\]
+By Cauchy--Schwarz and the Lipschitz hypothesis the integrand is at most
+$Lt\norm{\theta'-\theta}^2$, and $\int_0^1 Lt \,\dd t = L/2$.
+\end{proof}
+
+\begin{theorem}[Convergence of gradient descent to a stationary point]\label{th:gd}
+Let $J$ be as in Lemma \ref{lem:descent}, bounded below by $J_\star$. Let
+$\theta_{k+1} = \theta_k - \eta\,\nabla J(\theta_k)$ with $0 < \eta \le 1/L$. Then $J(\theta_k)$ is
+nonincreasing, and for every $K \ge 1$,
+\[
+\min_{0 \le k < K} \norm{\nabla J(\theta_k)}^2 \;\le\; \frac{2\big(J(\theta_0) - J_\star\big)}{\eta\, K} .
+\]
+In particular $\min_{k<K}\norm{\nabla J(\theta_k)} = O(K^{-1/2})$.
+\end{theorem}
+
+\begin{proof}
+Apply Lemma \ref{lem:descent} with $\theta = \theta_k$, $\theta' = \theta_{k+1}$:
+\[
+J(\theta_{k+1}) \le J(\theta_k) - \eta\norm{\nabla J(\theta_k)}^2 + \frac{L\eta^2}{2}\norm{\nabla J(\theta_k)}^2
+= J(\theta_k) - \eta\Big(1 - \frac{L\eta}{2}\Big)\norm{\nabla J(\theta_k)}^2 .
+\]
+Since $\eta \le 1/L$ we have $1 - L\eta/2 \ge 1/2$, so
+$J(\theta_{k+1}) \le J(\theta_k) - \tfrac{\eta}{2}\norm{\nabla J(\theta_k)}^2$; in particular the
+sequence $J(\theta_k)$ is nonincreasing. Summing for $k = 0,\dots,K-1$ and telescoping,
+\[
+\frac{\eta}{2}\sum_{k=0}^{K-1}\norm{\nabla J(\theta_k)}^2 \le J(\theta_0) - J(\theta_K) \le J(\theta_0) - J_\star ,
+\]
+and the minimum over $k$ is at most the average.
+\end{proof}
+
+\begin{keyboxwine}
+\textbf{Read the theorem for what it does not say.} It does not say that $\theta_k$ converges. It
+does not say that the limit points are minima --- only that the gradient becomes small somewhere
+along the trajectory, which saddle points and plateaus also satisfy. It does not say anything about
+the value $J(\theta_K)$ relative to $\inf J$. And the constant involves $L$, the Lipschitz constant
+of $\nabla J$, which for a PINN loss contains the differential operator applied twice and is
+therefore large: recall from Session 1, Remark 4.2, that the constructions achieving good
+approximation have weights of size $h^{-2}$, and $L$ inherits that scale.
+
+\smallskip
+Everything one hears about neural networks ``finding good minima'' lies outside this theorem. It is
+the subject of Session 6, and it is largely empirical.
+\end{keyboxwine}
+
+\begin{remark}[Beyond stationarity]
+There is a body of results showing that, for functions all of whose saddle points are \emph{strict}
+(the Hessian has a strictly negative eigenvalue there), gradient descent from a random
+initialisation avoids saddle points almost surely, and that perturbed versions escape them in
+polynomial time. These are genuine theorems, but their hypotheses --- in particular the strict-saddle
+property --- are not known to hold for the PINN loss, and we do not invoke them. We record only
+that stationarity is what Theorem \ref{th:gd} gives, and that the gap to optimality is not closed by
+any result we can quote here.
+\end{remark}
+
+\subsection{Stochastic gradients, momentum, and Adam}
+
+In practice the collocation points are often resampled, which makes the observed objective
+stochastic, and one uses accelerated variants. We record the algorithms precisely, because their
+status differs sharply from that of Theorem \ref{th:gd}.
+
+\begin{algorithm}[Adam, Kingma and Ba, 2015]\label{alg:adam}
+Given $\eta > 0$, $\beta_1, \beta_2 \in [0,1)$, $\epsilon > 0$, set $m_0 = v_0 = 0$ and iterate, with
+$g_k$ a (possibly stochastic) gradient at $\theta_k$:
+\[
+m_{k+1} = \beta_1 m_k + (1-\beta_1) g_k, \qquad
+v_{k+1} = \beta_2 v_k + (1-\beta_2) g_k^{\odot 2},
+\]
+\[
+\widehat m = \frac{m_{k+1}}{1 - \beta_1^{k+1}}, \qquad
+\widehat v = \frac{v_{k+1}}{1-\beta_2^{k+1}}, \qquad
+\theta_{k+1} = \theta_k - \eta\, \frac{\widehat m}{\sqrt{\widehat v} + \epsilon},
+\]
+all operations being componentwise.
+\end{algorithm}
+
+\begin{keybox}
+\textbf{An honesty note that belongs in the lecture.} The convergence proof in the original Adam
+paper is incorrect. Reddi, Kale and Kumar (2018) exhibit a simple stochastic \emph{convex} problem
+on which Adam does not converge to the optimum, and propose AMSGrad, for which a proof is given
+under stated hypotheses. Convergence results for Adam do exist under additional assumptions and with
+modified parameter regimes. None of this makes Adam a bad choice in practice --- it is the default
+in the PINN literature for good empirical reasons --- but a mathematics course should not present it
+as a method with a theorem behind it.
+\end{keybox}
+
+\subsection{Least-squares structure and quasi-Newton methods}
+
+The PINN loss is not an arbitrary nonconvex function: it is a sum of squares. That structure has a
+concrete consequence for its Hessian.
+
+\begin{proposition}[Gauss--Newton decomposition]\label{prop:gn}
+Let $r : \R^P \to \R^M$ be twice differentiable and $J(\theta) = \frac1M\norm{r(\theta)}^2$. Then
+\[
+\nabla J(\theta) = \frac{2}{M}\, Dr(\theta)^{\!\top} r(\theta),
+\qquad
+\nabla^2 J(\theta) = \frac{2}{M}\Big( Dr(\theta)^{\!\top} Dr(\theta) + \sum_{k=1}^M r_k(\theta)\,\nabla^2 r_k(\theta) \Big).
+\]
+In particular, at any $\theta^\star$ with $r(\theta^\star) = 0$ one has
+$\nabla^2 J(\theta^\star) = \frac{2}{M} Dr(\theta^\star)^{\!\top}Dr(\theta^\star) \succeq 0$, and the
+condition number of $\nabla^2 J(\theta^\star)$ is the \emph{square} of that of $Dr(\theta^\star)$
+restricted to the orthogonal complement of its kernel.
+\end{proposition}
+
+\begin{proof}
+Differentiating $J = \frac1M \sum_k r_k^2$ gives
+$\nabla J = \frac{2}{M}\sum_k r_k \nabla r_k = \frac{2}{M}Dr^{\!\top}r$. Differentiating once more,
+$\nabla^2 J = \frac{2}{M}\sum_k \big(\nabla r_k \nabla r_k^{\!\top} + r_k \nabla^2 r_k\big)$, and
+$\sum_k \nabla r_k\nabla r_k^{\!\top} = Dr^{\!\top}Dr$. At a zero-residual point the second group of
+terms vanishes. The eigenvalues of $Dr^{\!\top}Dr$ are the squared singular values of $Dr$, whence
+the statement on condition numbers.
+\end{proof}
+
+\begin{keybox}
+\textbf{Why the PINN literature chains Adam and then L-BFGS.} Proposition \ref{prop:gn} explains the
+practice, without proving that it is optimal.
+
+\smallskip
+\emph{(i)} Near a good fit the residuals are small, so the Hessian is close to
+$\frac{2}{M}Dr^{\!\top}Dr$: positive semidefinite, but with condition number the \emph{square} of
+that of $Dr$. A first-order method, whose progress is governed by the condition number, is therefore
+badly placed exactly in the final phase, where one wants the last digits.
+
+\smallskip
+\emph{(ii)} A quasi-Newton method builds a curvature model from successive gradients: BFGS maintains
+$B_k \approx \nabla^2 J$ satisfying the secant equation $B_{k+1}s_k = y_k$ with
+$s_k = \theta_{k+1}-\theta_k$, $y_k = \nabla J(\theta_{k+1}) - \nabla J(\theta_k)$; the
+limited-memory variant stores only the last few pairs $(s,y)$ instead of a $P \times P$ matrix,
+which is what makes it usable when $P$ is large.
+
+\smallskip
+\emph{(iii)} \textbf{The condition under which this is legitimate.} A quasi-Newton method needs the
+objective to be the \emph{same function} at successive iterates: the secant equation compares
+gradients of one function at two points. With fixed collocation points the PINN loss is
+deterministic, and this holds. If the collocation points are resampled at each step, it does not,
+and L-BFGS degrades --- a fact often rediscovered painfully. This is the practical reason the usual
+recipe is: Adam with resampling first, then freeze the points and run L-BFGS.
+\end{keybox}
+
+% ================================================================
+\section{Initialisation}
+
+The initial parameter is not a detail: it determines the function the optimiser starts from, and by
+Theorem \ref{th:gd} nothing pulls the trajectory away from its basin. The standard schemes come from
+one variance computation.
+
+\begin{proposition}[Variance propagation]\label{prop:init}
+Let $z \in \R^{n_{\mathrm{in}}}$ be a random vector with independent coordinates of mean $0$ and
+variance $v$, and let $W \in \R^{n_{\mathrm{out}} \times n_{\mathrm{in}}}$ have i.i.d.\ entries of
+mean $0$ and variance $s^2$, independent of $z$. Then each coordinate of $y = Wz$ has mean $0$ and
+\[
+\Var(y_i) = n_{\mathrm{in}}\, s^2\, v .
+\]
+Consequently the choice $s^2 = 1/n_{\mathrm{in}}$ preserves the coordinate variance across the
+layer. If moreover $z$ has a symmetric distribution and the activation $\ReLU$ is applied after the
+linear map, then $\E[\ReLU(y_i)^2] = \tfrac12\Var(y_i)$, so that variance is preserved by the choice
+$s^2 = 2/n_{\mathrm{in}}$.
+\end{proposition}
+
+\begin{proof}
+$y_i = \sum_j W_{ij}z_j$ with all terms independent and centred, so
+$\Var(y_i) = \sum_j \Var(W_{ij}z_j) = \sum_j \E[W_{ij}^2]\E[z_j^2] = n_{\mathrm{in}}s^2v$. For the
+last claim, $y_i$ is symmetric, so $\E[\ReLU(y_i)^2] = \E[y_i^2\ind_{y_i>0}] = \tfrac12\E[y_i^2]$.
+\end{proof}
+
+The first choice is Glorot--Bengio initialisation (usually symmetrised as
+$s^2 = 2/(n_{\mathrm{in}} + n_{\mathrm{out}})$ to balance the forward and backward passes), the
+second is He initialisation.
+
+\begin{remark}[Status of these rules, and a forward reference]
+Proposition \ref{prop:init} is a statement about the \emph{initial} network, at one layer, under an
+independence assumption that ceases to hold after the first gradient step. It is a scaling heuristic
+with a computation behind it, not a theorem about training, and it should be presented as such.
+
+What it does say matters for us. At initialisation, $\Phi_\theta$ is a random function whose
+characteristic frequency scale is set by the weight scale $s$: a network initialised with small
+weights starts out as a slowly varying function. Session 1, Proposition 3.5(iv), showed that the
+Barron seminorm of a pure frequency $K$ is exactly $K$; Session 6 will show that in the wide-network
+regime the training dynamics reduce high-frequency error far more slowly than low-frequency error.
+Initialisation is where those two observations first meet, and it is one of the few levers on
+spectral behaviour that costs nothing.
+\end{remark}
+
+% ================================================================
+\section{The cost of one training step}
+
+We can now assemble the pieces. Let $C := \cost(\Phi_\theta)$ be the cost of one forward evaluation
+of the network, $N$ the number of interior collocation points, $d$ the dimension, and consider a
+second-order operator $\Dd$.
+
+\begin{proposition}[Cost accounting]\label{prop:cost}
+Under the assumptions of §\,2, one evaluation of $J$ in \eqref{eq:pinn} costs
+$O\big(N\, d\, C\big)$, and one evaluation of $\nabla_\theta J$ costs a fixed multiple of that,
+independent of $P$.
+\end{proposition}
+
+\begin{proof}
+By Proposition \ref{prop:hvp}, the residual at one collocation point costs $O(dC)$; there are $N$ of
+them, and the boundary term is cheaper. This gives the first claim. The whole computation of $J$ is
+itself a straight-line program of length $O(NdC)$ with scalar output, so Proposition
+\ref{prop:reverse} --- or Theorem \ref{th:baur} in general --- bounds the cost of its gradient by a
+fixed multiple, with a constant independent of the number of variables, in particular of $P$.
+\end{proof}
+
+\begin{keybox}
+\textbf{Reading the count.} The parameter dimension $P$ --- which can be $10^4$ or $10^5$ --- does
+\emph{not} appear as a multiplicative factor in the gradient cost. That is the cheap-gradient
+principle at work, and it is the reason training a network with many parameters is feasible at all.
+What does appear is the factor $d$ from the Laplacian, and the factor $N$ from collocation.
+
+\smallskip
+The comparison with a classical method is instructive but should be made carefully. Assembling a
+finite element stiffness matrix costs $O(\#\text{elements})$ once, after which each linear solve
+is cheap and the method terminates. A PINN pays $O(NdC)$ per step, for thousands of steps, and has
+no termination criterion beyond stagnation. Session 10 returns to this comparison with published
+numbers rather than with counts.
+\end{keybox}
+
+% ================================================================
+\section{Summary}
+
+\begin{keybox}
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=*]
+\item \textbf{Differentiation is solved, and it is a theorem.} Reverse mode computes the gradient of
+a scalar function at a fixed multiple of the cost of the function, independently of the number of
+variables (Proposition \ref{prop:reverse}, Theorem \ref{th:baur}); forward mode is the right choice
+in the opposite regime. The price of reverse mode is memory: the whole trace.
+\item \textbf{AD is exact, and this is what makes PINNs possible.} A second derivative by finite
+differences loses about half the available digits, at a step size that must be tuned
+(Proposition \ref{prop:fd}); AD loses none and has no step size. The residual of a PDE can therefore
+be evaluated pointwise without any discretisation of the operator.
+\item \textbf{The cost of a Laplacian is $O(d)$ sweeps, not $O(1)$.} Hessian--vector products are
+cheap, the trace of a Hessian is not (Proposition \ref{prop:hvp}). This is the practical obstacle in
+high dimension, and it is separate from every approximation-theoretic question of Session 1.
+\item \textbf{Optimisation is not solved.} The unconditional guarantee is convergence of
+$\min_k\norm{\nabla J(\theta_k)}$ at rate $O(K^{-1/2})$ to a \emph{stationary point}
+(Theorem \ref{th:gd}). Nothing here concerns global minima, and the standard accelerated method has
+a known counterexample in the convex stochastic setting.
+\item \textbf{The loss is a sum of squares, and that is exploitable.} Near a good fit its Hessian is
+approximately $Dr^{\!\top}Dr$, whose condition number is the square of that of $Dr$
+(Proposition \ref{prop:gn}); this is the structural reason a quasi-Newton phase helps, and the
+reason it requires the collocation points to be frozen.
+\end{enumerate}
+\end{keybox}
+
+\medskip
+\noindent
+\textbf{Session 3.} With the class (Session 1) and the machinery (Session 2) in place, we can at
+last write the method down: the residual formulation, the treatment of boundary conditions, and an
+honest placement of PINNs among the classical methods of weighted residuals.
+
+% ================================================================
+\newpage
+\section{Problem set}
+
+\begin{exercise}[Dual numbers and forward mode]\label{ex:dual}
+Let $\R[\varepsilon] = \R[X]/(X^2)$ and, for $f$ differentiable at $a$, set
+$\widehat f(a + b\varepsilon) := f(a) + b f'(a)\varepsilon$.
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Verify $\widehat{f + g} = \widehat f + \widehat g$ and $\widehat{fg} = \widehat f\,\widehat g$,
+and show that the second identity is exactly the product rule together with $\varepsilon^2 = 0$.
+\item Verify $\widehat{g\circ f} = \widehat g \circ \widehat f$, and identify which classical rule
+this is.
+\item Deduce that running an unmodified program on $\R[\varepsilon]$ with input $x + v\varepsilon$
+returns $F(x) + DF(x)v\,\varepsilon$.
+\item Explain why this construction gives no direct access to second derivatives, and what one has to
+change to obtain them. \emph{(This is why libraries speak of nesting, not of a single higher-order
+type.)}
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Reverse mode by hand]\label{ex:reverse}
+Consider $\Phi_\theta(x) = c^{\!\top}\sigma(Wx + b)$ with $x \in \R^d$, $W \in \R^{n\times d}$,
+$b, c \in \R^n$, and $\sigma$ applied componentwise.
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Write the evaluation trace and count the arithmetic operations, to leading order in $nd$.
+\item Derive by hand the reverse sweep giving $\partial \Phi_\theta/\partial W$,
+$\partial\Phi_\theta/\partial b$, $\partial\Phi_\theta/\partial c$, and count its operations.
+Compare with Theorem \ref{th:baur}.
+\item Now compute $\Delta_x \Phi_\theta$ in closed form for this architecture, and count its cost.
+Does it match the $O(dC)$ of Proposition \ref{prop:hvp}? Why is this architecture atypically
+favourable?
+\item What would the cost be for a network with two hidden layers?
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[The finite-difference barrier]\label{ex:fd}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Prove the two bounds of Proposition \ref{prop:fd}.
+\item Carry out the optimisation in $h$ in both cases, and give the optimal $h$ and the resulting
+error in terms of $\varepsilon_{\!M}$ and the $M_k$.
+\item Do the same for the \emph{forward} difference $\big(f(x+h)-f(x)\big)/h$ for $f'$. Why is the
+classical advice ``take $h = \sqrt{\varepsilon_{\!M}}$'' attached to that formula and not to the
+central one?
+\item Numerically, on $f(x) = \tanh(3x+\tfrac12)$ at $x = 0.7$, the best achievable relative error is
+about $2\cdot 10^{-10}$ for $f'$ and about $3\cdot 10^{-9}$ for $f''$. Are these consistent with
+your formulas? What do you predict in single precision, and what does that imply for a PINN run on a
+GPU in single precision?
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Hutchinson's estimator]\label{ex:hutch}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Prove the unbiasedness statement of Lemma \ref{lem:hutchinson} for any $v$ with
+$\E[vv^{\!\top}] = I_d$, and give two examples of such $v$.
+\item Prove the variance formula for Rademacher $v$.
+\item Compute the variance when $v \sim \Nn(0,I_d)$ instead, and compare. Which of the two would you
+use? \emph{(Hint: for Gaussian $v$ and symmetric $A$, $\Var(v^{\!\top}Av) = 2\norm{A}_F^2$.)}
+\item Suppose $H$ is diagonal. What does the estimator cost, and what is its variance? Interpret.
+\item For which PDEs would you expect the spatial Hessian of the solution to be nearly diagonal, and
+for which not? What does your answer suggest about when this technique is safe?
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Gradient descent and its limits]\label{ex:gd}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Prove Lemma \ref{lem:descent} and Theorem \ref{th:gd}.
+\item Show that the conclusion of Theorem \ref{th:gd} cannot be improved to a statement about
+$J(\theta_K) - \inf J$: exhibit a smooth $J : \R \to \R$, bounded below, and a starting point from
+which gradient descent with a step $\eta \le 1/L$ converges to a point that is not a global minimum.
+\item Show that the conclusion also cannot be improved to convergence of the sequence $(\theta_k)$
+without further assumptions. \emph{(A one-dimensional example with a flat piece suffices.)}
+\item In Theorem \ref{th:gd} the bound degrades as $L$ grows. Using Session 1,
+Remark 4.2, argue informally that $L$ is large for a PINN loss and identify which factor of the
+construction is responsible.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Least squares, conditioning and quasi-Newton]\label{ex:gn}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Prove Proposition \ref{prop:gn}.
+\item Let $A \in \R^{M\times P}$ have singular values $s_1 \ge \cdots \ge s_p > 0$ on the orthogonal
+complement of its kernel. Give the nonzero eigenvalues of $A^{\!\top}A$ and the relation between the
+two condition numbers.
+\item Deduce that a first-order method applied to a least-squares problem sees a condition number
+that is the square of the one seen by a method applied to the residual directly. What does this
+suggest about formulations of the PINN loss?
+\item State the secant equation for BFGS and explain, in one sentence each, why it requires the
+objective to be fixed across iterations and why the limited-memory variant is needed when $P$ is
+large.
+\item \emph{(Open-ended.)} Conclude: for which phase of PINN training is a quasi-Newton method
+appropriate, and under what condition on the collocation points?
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+
+\ifsolutions
+\newpage
+\section{Solutions}
+
+\subsection*{Exercise \ref{ex:dual}}
+
+\textbf{1.} $\widehat{f+g}(a+b\varepsilon) = (f+g)(a) + b(f+g)'(a)\varepsilon
+= \big(f(a) + bf'(a)\varepsilon\big) + \big(g(a)+bg'(a)\varepsilon\big)$. For the product, multiply
+in $\R[\varepsilon]$:
+\[
+\widehat f(a+b\varepsilon)\,\widehat g(a+b\varepsilon)
+= \big(f(a)+bf'(a)\varepsilon\big)\big(g(a)+bg'(a)\varepsilon\big)
+= f(a)g(a) + b\big(f'(a)g(a) + f(a)g'(a)\big)\varepsilon,
+\]
+the $\varepsilon^2$ term vanishing by definition of the ring. The bracket is $(fg)'(a)$, so the
+result is $\widehat{fg}(a+b\varepsilon)$. The product rule is thus \emph{literally} the statement
+that the lift is multiplicative modulo $X^2$.
+
+\textbf{2.} $\widehat g\big(\widehat f(a+b\varepsilon)\big) = \widehat g\big(f(a) + bf'(a)\varepsilon\big)
+= g(f(a)) + bf'(a)g'(f(a))\varepsilon = (g\circ f)(a) + b(g\circ f)'(a)\varepsilon$. This is the
+chain rule.
+
+\textbf{3.} A program is a finite composition of elementary operations, each of which is a sum, a
+product, or a univariate function application. By items 1 and 2 the lift commutes with each, hence
+with the whole composition; formally, induct on the length of the trace, which is exactly the
+induction in the proof of Proposition \ref{prop:forward}. The result on the multivariate input
+$x + v\varepsilon$ follows by applying the same argument coordinatewise.
+
+\textbf{4.} Because $\varepsilon^2 = 0$ destroys precisely the information a second derivative
+needs: the lift retains a first-order Taylor expansion only. To obtain second derivatives one either
+works in $\R[X]/(X^3)$ --- with $\widehat f(a+b\varepsilon) = f(a) + bf'(a)\varepsilon +
+\tfrac{b^2}{2}f''(a)\varepsilon^2$, which is truncated Taylor arithmetic --- or nests one mode
+inside another, which is the ``forward over reverse'' of Proposition \ref{prop:hvp}. Both are
+implemented; the second is what one uses for Hessian--vector products.
+
+\subsection*{Exercise \ref{ex:reverse}}
+
+\textbf{1.} Trace: $z_1 = Wx + b$ ($nd$ multiplications and $nd$ additions, to leading order $2nd$),
+$z_2 = \sigma(z_1)$ ($n$ activation evaluations), $z_3 = c^{\!\top}z_2$ ($2n$). Total
+$C = 2nd + O(n)$, dominated by the matrix--vector product.
+
+\textbf{2.} Write $\bar u := \partial\Phi_\theta/\partial u$. Starting from $\bar z_3 = 1$:
+\[
+\bar c = z_2, \qquad \bar z_2 = c, \qquad \bar z_1 = c \odot \sigma'(z_1), \qquad
+\bar b = \bar z_1, \qquad \bar W = \bar z_1\, x^{\!\top}.
+\]
+The only nontrivial cost is the outer product $\bar z_1 x^{\!\top}$, which is $nd$ multiplications;
+everything else is $O(n)$. So the reverse sweep costs $nd + O(n)$, and the forward-plus-reverse
+total is $3nd + O(n) \approx 1.5\,C$. This is comfortably below the constant of Theorem
+\ref{th:baur}, as it should be: the theorem is a worst-case bound over all straight-line programs.
+
+\textbf{3.} $\partial_{x_j}\Phi_\theta = \sum_i c_i \sigma'(z_{1,i})W_{ij}$ and
+$\partial_{x_jx_j}\Phi_\theta = \sum_i c_i\sigma''(z_{1,i})W_{ij}^2$, so
+\[
+\Delta_x\Phi_\theta = \sum_{i=1}^n c_i\, \sigma''(z_{1,i}) \sum_{j=1}^d W_{ij}^2 .
+\]
+The inner sums are the squared row norms of $W$: total cost $nd + O(n)$, that is $O(C)$ and
+\emph{not} $O(dC)$.
+
+The architecture is atypically favourable because with a single hidden layer the map
+$x \mapsto z_1$ is affine, so the spatial Hessian of the $i$-th hidden unit is the rank-one matrix
+$\sigma''(z_{1,i})\,W_{i\cdot}W_{i\cdot}^{\!\top}$, whose trace
+$\sigma''(z_{1,i})\norm{W_{i\cdot}}^2$ is available in closed form. No such collapse occurs as
+soon as a second nonlinearity intervenes.
+
+\textbf{4.} With two hidden layers the chain rule produces a genuine sum over paths, and the
+diagonal of the Hessian no longer factorises; one is back to the general count of Proposition
+\ref{prop:hvp}, namely $O(dC)$ by $d$ Hessian--vector products. This is worth doing explicitly at
+least once in one's life: it is the moment where the factor $d$ in the cost of a PINN becomes
+concrete.
+
+\subsection*{Exercise \ref{ex:fd}}
+
+\textbf{1--2.} See the proof of Proposition \ref{prop:fd}. Explicitly, minimising
+$\phi_1(h) = \tfrac{M_3}{6}h^2 + \varepsilon_{\!M}M_0h^{-1}$ gives
+$\phi_1'(h) = \tfrac{M_3}{3}h - \varepsilon_{\!M}M_0h^{-2} = 0$, so
+\[
+h_\star = \Big(\frac{3\varepsilon_{\!M}M_0}{M_3}\Big)^{1/3},
+\qquad
+\phi_1(h_\star) = \tfrac{3}{2}\,3^{-1/3}\,M_3^{1/3}\,(\varepsilon_{\!M}M_0)^{2/3},
+\]
+of order $\varepsilon_{\!M}^{2/3}$. (The quickest route to the constant is to note that at the
+optimum the two terms are in a fixed ratio: here $\phi_1'(h_\star)=0$ forces the truncation term to
+be half the rounding term.) Minimising
+$\phi_2(h) = \tfrac{M_4}{12}h^2 + 4\varepsilon_{\!M}M_0h^{-2}$ gives
+$\tfrac{M_4}{6}h = 8\varepsilon_{\!M}M_0h^{-3}$, so
+$h_\star = (48\varepsilon_{\!M}M_0/M_4)^{1/4}$ and $\phi_2(h_\star)$ of order
+$\varepsilon_{\!M}^{1/2}$.
+
+\textbf{3.} For the forward difference, Taylor gives a truncation error $\tfrac{h}{2}M_2$ --- first
+order, not second --- and the rounding term is again $O(\varepsilon_{\!M}M_0/h)$. Minimising
+$\tfrac{M_2}{2}h + \varepsilon_{\!M}M_0h^{-1}$ gives $h_\star \asymp \sqrt{\varepsilon_{\!M}}$ and an
+error of order $\sqrt{\varepsilon_{\!M}}$. The classical advice therefore belongs to the forward
+formula; transplanting it to the central formula costs about two orders of magnitude, since the
+central formula wants $h \asymp \varepsilon_{\!M}^{1/3}$.
+
+\textbf{4.} Consistent. With $\varepsilon_{\!M} \approx 1.1\cdot10^{-16}$,
+$\varepsilon_{\!M}^{2/3} \approx 2.4\cdot 10^{-11}$ and $\varepsilon_{\!M}^{1/2}\approx 1.0\cdot10^{-8}$;
+the observed $2\cdot10^{-10}$ and $3\cdot10^{-9}$ are within one to two orders of magnitude, which is
+what one expects given that the constants $M_k/M_0$ for $\tanh(3x+\tfrac12)$ are of size $3^k$.
+
+In single precision, $\varepsilon_{\!M}\approx 6\cdot10^{-8}$, so the floors become
+$\varepsilon_{\!M}^{2/3}\approx 1.5\cdot10^{-5}$ for $f'$ and
+$\varepsilon_{\!M}^{1/2}\approx 2.4\cdot10^{-4}$ for $f''$. A PINN whose residual were built from
+finite differences in single precision would therefore have a residual floor of about $10^{-4}$
+\emph{before any training error at all} --- which would make the whole loss meaningless below that
+level. With AD there is no such floor: the derivative is computed by the same arithmetic as the
+function, and inherits its accuracy. This is the concrete content of the claim that AD is what makes
+PINNs viable.
+
+\subsection*{Exercise \ref{ex:hutch}}
+
+\textbf{1.} See Lemma \ref{lem:hutchinson}. Examples: $v$ with independent Rademacher coordinates,
+and $v \sim \Nn(0,I_d)$; in both cases $\E[v_iv_j] = \delta_{ij}$.
+
+\textbf{2.} See Lemma \ref{lem:hutchinson}.
+
+\textbf{3.} For $v\sim\Nn(0,I_d)$ and $A$ symmetric, diagonalise $A = Q\Lambda Q^{\!\top}$; then
+$v^{\!\top}Av = \sum_i \lambda_i u_i^2$ with $u = Q^{\!\top}v \sim \Nn(0,I_d)$, and since
+$\Var(u_i^2) = 2$,
+\[
+\Var(v^{\!\top}Av) = 2\sum_i\lambda_i^2 = 2\norm{A}_F^2 .
+\]
+Comparing with the Rademacher value $2(\norm A_F^2 - \sum_i A_{ii}^2)$, the Rademacher estimator has
+variance smaller by exactly $2\sum_i A_{ii}^2$ --- it never does worse, and it does strictly better
+whenever the diagonal is nonzero, which is the case of interest here since the diagonal is what we
+are trying to estimate. Rademacher is the right choice.
+
+\textbf{4.} If $H$ is diagonal, the Rademacher variance is $0$: a single sample returns
+$\sum_i H_{ii}$ exactly, at the cost of one Hessian--vector product instead of $d$. The estimator is
+exact precisely in the case where the quantity is a sum of $d$ independent one-dimensional
+curvatures with no coupling.
+
+\textbf{5.} A separable operator --- the Laplacian acting on a solution that is close to a sum
+$\sum_i u_i(x_i)$ --- gives a nearly diagonal Hessian, and the estimator is excellent. Anisotropic
+diffusion, strong cross-derivative coupling, solutions with fronts oblique to the axes, or any
+problem after a change of variables that mixes coordinates, give large off-diagonal mass and a large
+variance. The honest conclusion is that the technique is safe when one already knows something about
+the structure of the solution, which is an uncomfortable position; it is why the method is used with
+care and why its analysis in this setting is not settled.
+
+\subsection*{Exercise \ref{ex:gd}}
+
+\textbf{1.} See Lemma \ref{lem:descent} and Theorem \ref{th:gd}.
+
+\textbf{2.} Take the tilted double well
+\[
+J(x) = (x^2-1)^2 + \delta x, \qquad 0 < \delta < \tfrac{8}{3\sqrt3},
+\]
+modified outside $[-3,3]$ so as to grow quadratically (which makes $\nabla J$ globally Lipschitz
+without touching the wells). Then $J'(x) = 4x^3 - 4x + \delta$ has three simple roots, one near each
+of $-1$, $0$, $1$; the outer two are local minima with
+$J(\approx -1) \approx -\delta$ and $J(\approx 1)\approx +\delta$, so the right-hand well is
+\emph{not} global. Starting from $x_0 = 2$, Theorem \ref{th:gd} shows the iterates decrease $J$
+monotonically, so they can never cross the intermediate local maximum near $0$, whose value is
+$\approx 1$; hence they converge to the right-hand local minimum, with
+$J > \inf J$.
+
+\emph{A remark worth making in passing.} The condition on $\delta$ is what keeps three roots: the
+cubic $4x^3-4x+\delta$ has three real roots exactly when $\abs\delta < 8/(3\sqrt3) \approx 1.54$.
+Take $\delta$ small, say $\delta = \tfrac14$, and everything above is explicit.
+
+\textbf{3.} Let $J$ be smooth, equal to $0$ on $[-1,1]$ and positive outside, with $\nabla J$
+Lipschitz (a standard mollified construction). Every point of $[-1,1]$ is stationary. Starting at
+$x_0 = 2$ the iterates decrease and enter $[-1,1]$, after which they are frozen at whichever point
+they landed on --- so the limit depends on the step size and is not characterised by any property of
+$J$ beyond stationarity. More elaborate examples give gradient trajectories with a continuum of limit
+points; the point of the exercise is that Theorem \ref{th:gd} controls only
+$\min_k\norm{\nabla J(\theta_k)}$, and nothing else.
+
+\textbf{4.} $J$ involves $\Dd[\Phi_\theta]$, hence second derivatives of the network in $x$, hence
+products of weights; its gradient in $\theta$ therefore contains terms of degree comparable to the
+weight magnitudes, and $L$ scales like a power of $\max_\ell\norm{W_\ell}$. Session 1,
+Remark 4.2, showed that the constructions achieving accuracy $h^2$ in $W^{1,\infty}$ have output
+weights of size $h^{-2}$: the very parameters that make the approximation good make $L$ large, hence
+the admissible step $\eta \le 1/L$ small, hence the bound of Theorem \ref{th:gd} weak. This is the
+first appearance in the course of the tension between approximation quality and trainability, and it
+is the subject of Session 6. The argument is a scaling heuristic, not a proof: we have not bounded
+$L$ from below.
+
+\subsection*{Exercise \ref{ex:gn}}
+
+\textbf{1.} See Proposition \ref{prop:gn}.
+
+\textbf{2.} $A^{\!\top}A$ is symmetric positive semidefinite with nonzero eigenvalues
+$s_1^2 \ge \cdots \ge s_p^2$. Hence
+$\kappa(A^{\!\top}A) = s_1^2/s_p^2 = \kappa(A)^2$, the condition numbers being taken on the
+orthogonal complement of the kernel.
+
+\textbf{3.} A first-order method's progress on a quadratic model is governed by the condition number
+of the Hessian, which by item 2 is $\kappa(Dr)^2$. Squaring a condition number of, say, $10^3$ gives
+$10^6$, which is the difference between a problem that converges and one that stalls. The suggestion
+is that formulations acting on the residual vector rather than on its squared norm --- Gauss--Newton,
+Levenberg--Marquardt, or least-squares solvers based on QR rather than on the normal equations ---
+should behave better, and this is indeed observed. It is also an argument for the variational
+formulations of Session 7, which change the residual, not merely the optimiser.
+
+\textbf{4.} BFGS requires $B_{k+1}s_k = y_k$ with $s_k = \theta_{k+1}-\theta_k$ and
+$y_k = \nabla J(\theta_{k+1}) - \nabla J(\theta_k)$. It requires a fixed objective because $y_k$ is
+meaningful as a difference of gradients only if both are gradients of the \emph{same} function:
+with resampled collocation points $y_k$ mixes a curvature signal with the noise of changing the
+objective, and the curvature model degrades. The limited-memory variant is needed because $B_k$ is
+$P \times P$; storing the last $m$ pairs $(s,y)$ with $m$ of order $10$ gives an implicit
+representation of $B_k^{-1}$ at cost $O(mP)$ per step.
+
+\textbf{5.} A quasi-Newton phase is appropriate in the \emph{final} phase, where the residuals are
+small, the Gauss--Newton term dominates the Hessian (Proposition \ref{prop:gn}), and one is trying
+to extract the last digits from an ill-conditioned but locally well-behaved problem. The condition
+is that the collocation points be frozen, so that the objective is one fixed deterministic function.
+Hence the standard recipe: Adam with resampling to get into a good region, then freeze and run
+L-BFGS. Note that this is a justification of a practice, not a theorem that the practice is optimal.
+
+% ================================================================
+\newpage
+\fi
+
+\section*{References for this session}
+\addcontentsline{toc}{section}{References for this session}
+
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+\item A.~Griewank, A.~Walther, \emph{Evaluating Derivatives: Principles and Techniques of
+Algorithmic Differentiation}, 2nd ed., SIAM (2008). --- \emph{The reference for all of §\,2.}
+\item A.~G.~Baydin, B.~A.~Pearlmutter, A.~A.~Radul, J.~M.~Siskind, \emph{Automatic differentiation
+in machine learning: a survey}, J.~Mach.\ Learn.\ Res.\ \textbf{18} (2018), 1--43.
+\item W.~Baur, V.~Strassen, \emph{The complexity of partial derivatives}, Theoretical Computer
+Science \textbf{22} (1983), 317--330.
+\item J.~Morgenstern, \emph{How to compute fast a function and all its derivatives: a variation on
+the theorem of Baur--Strassen}, SIGACT News \textbf{16} (1985), 60--62.
+\item J.~Bolte, E.~Pauwels, \emph{Conservative set valued fields, automatic differentiation,
+stochastic gradient methods and deep learning}, Mathematical Programming \textbf{188} (2021),
+19--51.
+\item M.~F.~Hutchinson, \emph{A stochastic estimator of the trace of the influence matrix for
+Laplacian smoothing splines}, Communications in Statistics --- Simulation and Computation
+\textbf{18} (1989), 1059--1076.
+\item J.~Nocedal, S.~J.~Wright, \emph{Numerical Optimization}, 2nd ed., Springer (2006). ---
+\emph{The reference for §\,3.4, in particular BFGS and L-BFGS.}
+\item L.~Bottou, F.~E.~Curtis, J.~Nocedal, \emph{Optimization methods for large-scale machine
+learning}, SIAM Review \textbf{60} (2018), 223--311.
+\item D.~P.~Kingma, J.~Ba, \emph{Adam: a method for stochastic optimization}, ICLR 2015.
+\item S.~J.~Reddi, S.~Kale, S.~Kumar, \emph{On the convergence of Adam and beyond}, ICLR 2018. ---
+\emph{The counterexample and AMSGrad.}
+\item X.~Glorot, Y.~Bengio, \emph{Understanding the difficulty of training deep feedforward neural
+networks}, AISTATS 2010.
+\item K.~He, X.~Zhang, S.~Ren, J.~Sun, \emph{Delving deep into rectifiers}, ICCV 2015.
+\end{itemize}
+
+\end{document}

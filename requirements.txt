@@ -1,0 +1,5 @@
+# Computational labs. CPU only; no GPU is needed anywhere in this course.
+torch>=2.0
+numpy>=1.24
+matplotlib>=3.7
+jupyter>=1.0

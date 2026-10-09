@@ -1,0 +1,199 @@
+% =====================================================================
+%  pinns-course.sty — shared style for
+%  "Physics-Informed Neural Networks for PDEs", M2 MACIA
+%  Paul Boureau — AGM, CY Cergy Paris University
+%
+%  Options
+%    flat   theorem family numbered continuously (problem classes, labs)
+%           default: numbered within sections (lecture notes)
+%
+%  Solutions switch
+%    Compiling with \def\StudentBuild{} before \input sets \solutionsfalse,
+%    so that  \ifsolutions ... \fi  blocks are dropped. See the Makefile.
+% =====================================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{pinns-course}[2026/10/09 PINNs for PDEs course style]
+
+\newif\ifcourse@flat \course@flatfalse
+\DeclareOption{flat}{\course@flattrue}
+\DeclareOption*{\PackageWarning{pinns-course}{Unknown option '\CurrentOption'}}
+\ProcessOptions\relax
+
+% ------------------------------------------------- solutions switch
+\newif\ifsolutions
+\ifdefined\StudentBuild \solutionsfalse \else \solutionstrue \fi
+
+% ------------------------------------------------- base packages
+\RequirePackage[T1]{fontenc}
+\RequirePackage[utf8]{inputenc}
+\RequirePackage[english]{babel}
+\RequirePackage{newtxtext}
+\let\Bbbk\relax
+\let\openbox\relax
+\RequirePackage{amsmath,amssymb,amsthm,mathtools}
+\RequirePackage{newtxmath}
+\RequirePackage{xcolor}
+\RequirePackage[a4paper,margin=2.6cm,headheight=14pt]{geometry}
+\RequirePackage{enumitem}
+\RequirePackage{graphicx}
+\RequirePackage{booktabs}
+\RequirePackage{tikz}
+\RequirePackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing}
+\RequirePackage{microtype}
+\RequirePackage{fancyhdr}
+\RequirePackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\RequirePackage[font=small,labelformat=empty,justification=raggedright,
+                singlelinecheck=false]{caption}
+
+% ------------------------------------------------- palette
+\definecolor{coursteal}{HTML}{0E6A62}
+\definecolor{courswine}{HTML}{8A3A55}
+\definecolor{coursochre}{HTML}{7E5C0E}
+\definecolor{coursgrey}{HTML}{5C6663}
+\definecolor{coursbg}{HTML}{F0F3F0}
+\definecolor{codebg}{HTML}{F4F6F4}
+
+\RequirePackage[colorlinks=true,linkcolor=coursteal,citecolor=coursteal,
+                urlcolor=coursteal]{hyperref}
+
+% ------------------------------------------------- document metadata
+% \coursemeta{pdftitle}{running header tail}{pdfkeywords}
+\newcommand{\coursemeta}[3]{%
+  \hypersetup{
+    pdftitle={#1},
+    pdfauthor={Paul Boureau (AGM, CY Cergy Paris University)},
+    pdfsubject={M2 MACIA --- Physics-Informed Neural Networks for PDEs},
+    pdfkeywords={#3}}%
+  \pagestyle{fancy}\fancyhf{}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \lhead{\small\textsc{\color{coursgrey} P.~Boureau \ \textbullet\ PINNs for PDEs \ \textbullet\ #2}}%
+  \rhead{\small\color{coursgrey}\thepage}%
+}
+
+% \coursetitle{kicker}{big title}{optional subtitle}
+\newcommand{\coursetitle}[3]{%
+\begin{center}
+{\color{coursgrey}\scshape\small M2 MACIA \quad\textbullet\quad Physics-Informed Neural Networks for PDEs}
+
+\vspace{6pt}
+{\color{coursteal}\rule{\textwidth}{1.2pt}}
+\vspace{10pt}
+
+{\LARGE\bfseries #1}
+
+\vspace{8pt}
+{\LARGE #2}
+
+\ifx\relax#3\relax\else\vspace{6pt}{\large\itshape #3}\fi
+
+\vspace{12pt}
+{\color{coursteal}\rule{\textwidth}{0.4pt}}
+
+\vspace{12pt}
+{\large Paul Boureau}
+
+\vspace{4pt}
+{\color{coursgrey}\small AGM \ \textbullet\ CY Cergy Paris University}
+\end{center}
+}
+
+% ------------------------------------------------- theorem environments
+\theoremstyle{plain}
+\ifcourse@flat
+  \newtheorem{theorem}{Theorem}
+  \newtheorem{proposition}[theorem]{Proposition}
+  \newtheorem{lemma}[theorem]{Lemma}
+  \newtheorem{corollary}[theorem]{Corollary}
+  \theoremstyle{definition}
+  \newtheorem{definition}{Definition}
+  \newtheorem{example}{Example}
+  \newtheorem{algorithm}{Algorithm}
+  \theoremstyle{remark}
+  \newtheorem{remark}{Remark}
+\else
+  \newtheorem{theorem}{Theorem}[section]
+  \newtheorem{proposition}[theorem]{Proposition}
+  \newtheorem{lemma}[theorem]{Lemma}
+  \newtheorem{corollary}[theorem]{Corollary}
+  \theoremstyle{definition}
+  \newtheorem{definition}[theorem]{Definition}
+  \newtheorem{example}[theorem]{Example}
+  \newtheorem{algorithm}[theorem]{Algorithm}
+  \theoremstyle{remark}
+  \newtheorem{remark}[theorem]{Remark}
+\fi
+\theoremstyle{definition}
+\newtheorem{exercise}{Exercise}
+\newtheorem{task}{Task}
+\renewcommand{\proofname}{\normalfont\scshape Proof}
+
+% ------------------------------------------------- notation
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\ee}{\mathrm{e}}
+\newcommand{\ii}{\mathrm{i}}
+\newcommand{\Nn}{\mathcal{N}}
+\newcommand{\Ff}{\mathcal{F}}
+\newcommand{\Dd}{\mathcal{D}}
+\newcommand{\Bb}{\mathcal{B}}
+\newcommand{\Rr}{\mathcal{R}}
+\newcommand{\Pp}{\mathcal{P}}
+\newcommand{\Hh}{\mathcal{H}}
+\newcommand{\Ee}{\mathcal{E}}
+\newcommand{\Gg}{\mathcal{G}}
+\newcommand{\Ll}{\mathcal{L}}
+\newcommand{\co}{\operatorname{co}}
+\DeclareMathOperator{\ReLU}{ReLU}
+\DeclareMathOperator{\supp}{supp}
+\DeclareMathOperator{\Span}{span}
+\DeclareMathOperator{\sech}{sech}
+\DeclareMathOperator{\tr}{tr}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\cost}{cost}
+\DeclareMathOperator{\dist}{dist}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+\newcommand{\abs}[1]{\left\lvert #1 \right\rvert}
+\newcommand{\scal}[2]{\langle #1 , #2 \rangle}
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\fl}{\mathrm{fl}}
+
+% ------------------------------------------------- boxes
+\newtcolorbox{plainbox}[1][]{
+  breakable, enhanced, colback=coursbg, colframe=coursteal,
+  boxrule=0pt, leftrule=2pt, arc=0pt, outer arc=0pt,
+  left=10pt, right=10pt, top=8pt, bottom=8pt, #1}
+\newtcolorbox{warnbox}[1][]{
+  breakable, enhanced, colback=coursbg, colframe=courswine,
+  boxrule=0pt, leftrule=2pt, arc=0pt, outer arc=0pt,
+  left=10pt, right=10pt, top=8pt, bottom=8pt, #1}
+\newtcolorbox{setting}[1][]{
+  breakable, enhanced, colback=coursbg, colframe=coursteal,
+  boxrule=0pt, leftrule=2pt, arc=0pt, outer arc=0pt,
+  left=10pt, right=10pt, top=8pt, bottom=8pt,
+  title={\color{coursteal}\scshape\footnotesize What you need for this part},
+  fonttitle=\normalfont, coltitle=coursteal,
+  attach title to upper={\par\vspace{4pt}}, #1}
+\newenvironment{keybox}{\begin{plainbox}}{\end{plainbox}}
+\newenvironment{keyboxwine}{\begin{warnbox}}{\end{warnbox}}
+
+% ------------------------------------------------- inline marks
+\newcommand{\kw}[1]{\textcolor{coursteal}{\textbf{#1}}}
+\newcommand{\code}[1]{{\color{coursteal}\texttt{\small #1}}}
+\newcommand{\tagcore}{{\normalfont\ \scriptsize\color{coursteal}\textsc{[core]}}\ }
+\newcommand{\tagextra}{{\normalfont\ \scriptsize\color{coursgrey}\textsc{[take home]}}\ }
+
+% ------------------------------------------------- list defaults
+\setlist[itemize]{itemsep=2pt,topsep=4pt}
+\setlist[enumerate]{itemsep=3pt,topsep=4pt}
+
+\endinput

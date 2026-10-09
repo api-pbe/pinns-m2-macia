@@ -1,0 +1,813 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[flat]{pinns-course}
+
+\coursemeta{Session 1, problem class --- Universal approximation}{Session 1, problem class}{universal approximation, Cybenko, Leshno-Lin-Pinkus-Schocken, neural networks, M2 MACIA, AGM, CY Cergy Paris University}
+
+% ================================================================
+\begin{document}
+
+\coursetitle{Session 1 \textbullet\ Problem class}{Universal approximation}{Rebuilding the theorems of Cybenko and of\\[2pt] Leshno--Lin--Pinkus--Schocken from scratch}
+
+\vspace{6pt}
+
+\begin{plainbox}
+\textbf{How this sheet works.} It replaces the lecture on universal approximation. Everything that
+would have been proved at the board is proved here by you. Each part opens with a short box giving
+the objects and the external results you may use \emph{without proof}; everything else is to be
+established.
+
+\smallskip
+Exercises marked \textsc{core} carry the main line of argument and should be done in order: together
+they reconstruct the two central theorems. Those marked \textsc{if time permits} probe the
+hypotheses and can be taken home.
+
+\smallskip
+Hints are collected in §\,8, deliberately away from the statements. Full solutions are in §\,9.
+
+\smallskip
+\textbf{Prerequisites.} Session 1, §\,1 (the class $\Sigma_n(\sigma)$ and its structure).
+Functional analysis: Hahn--Banach, dual of $C(K)$, Riesz--Markov. Measure theory: dominated
+convergence, Fourier transform of a finite measure. Stone--Weierstrass.
+\end{plainbox}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ================================================================
+\section{Notation, and the question}
+
+\begin{setting}
+Throughout, $d \ge 1$, $K \subset \R^d$ is compact, and $\sigma : \R \to \R$ is an activation.
+Recall from §\,1 of the lecture notes:
+\[
+\Sigma_n(\sigma) := \Big\{ x \mapsto \sum_{i=1}^n c_i\, \sigma(w_i \cdot x + b_i)
+\ :\ c_i \in \R,\ w_i \in \R^d,\ b_i \in \R \Big\},
+\qquad
+\Sigma(\sigma) := \bigcup_{n \ge 1} \Sigma_n(\sigma),
+\]
+so that $\Sigma(\sigma)$ is the linear span of the \kw{ridge functions}
+$x \mapsto \sigma(w\cdot x + b)$, and is a one-hidden-layer object. $C(K)$ carries the uniform norm
+$\norm{f}_\infty = \sup_K\abs f$.
+\end{setting}
+
+\noindent
+\textbf{The question of this sheet.} For which $\sigma$ is $\Sigma(\sigma)$ dense in $C(K)$?
+
+\smallskip
+\noindent
+Two answers will be reconstructed. The first (Part D--E) is Cybenko's 1989 theorem: density holds
+for every continuous bounded \emph{sigmoidal} $\sigma$. The second (Part F) is the complete
+characterisation of Leshno, Lin, Pinkus and Schocken: for continuous $\sigma$, density holds
+\emph{if and only if $\sigma$ is not a polynomial}. Part B proves the ``only if'', which is easy and
+instructive; Part G asks what each hypothesis is really doing.
+
+\begin{warnbox}
+\textbf{A word on what we are \emph{not} doing.} Nothing on this sheet produces a network, an
+algorithm, or a bound on the number of neurons needed to reach accuracy $\varepsilon$. Keep that in
+view: Exercise \ref{ex:reading} is where we make the observation explicit, and it is the reason
+§\,3 of the lecture notes exists at all.
+\end{warnbox}
+
+% ================================================================
+\section{Part A --- Getting the object in hand}
+
+\begin{setting}
+A function $\sigma$ is \kw{sigmoidal} if it is bounded and measurable with
+\[
+\lim_{t\to+\infty}\sigma(t) = 1, \qquad \lim_{t\to-\infty}\sigma(t) = 0 .
+\]
+The logistic function $\mathrm{sig}(t) = (1+\ee^{-t})^{-1}$ is sigmoidal and continuous; so is
+$\tfrac12(1+\tanh(t/2))$. No result is needed for this part beyond the definitions.
+\end{setting}
+
+\begin{exercise}[Warm-up: what does $\Sigma(\sigma)$ contain? \tagcore]\label{ex:warmup}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Take $d = 1$ and $\sigma = \tanh$. Describe in words what each of $c$, $w$, $b$ does to the
+graph of $x \mapsto c\,\sigma(wx + b)$. Which of the three controls the \emph{steepness}?
+\item Show that if $\sigma(t_0) \ne 0$ for some $t_0$, then every constant function belongs to
+$\Sigma_1(\sigma)$.
+\item Let $\sigma$ be sigmoidal and let $a < b$ in $\R$. Show that, for $d = 1$,
+\[
+\sigma\big(\lambda(x-a)\big) - \sigma\big(\lambda(x-b)\big) \xrightarrow[\lambda\to+\infty]{}
+\ind_{(a,b)}(x) \qquad \text{for every } x \notin \{a,b\}.
+\]
+Which element of $\Sigma_2(\sigma)$ is on the left?
+\item Deduce an informal argument that $\Sigma(\sigma)$ should be dense in $C([0,1])$. Which
+classical approximation result are you implicitly invoking?
+\item Now let $d \ge 2$. Explain in two or three sentences why the argument of item 4 does not
+transpose, and what goes wrong. \emph{This is the reason Parts C--E are needed at all.}
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+\section{Part B --- The easy direction: polynomial activations}
+
+\begin{setting}
+$\Pp_m(\R^d)$ denotes the space of real polynomials in $d$ variables of total degree $\le m$; it is
+finite-dimensional. You may use without proof that a finite-dimensional subspace of a normed vector
+space is closed.
+\end{setting}
+
+\begin{exercise}[Polynomial activations are not universal \tagcore]\label{ex:poly}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Let $\sigma$ be a polynomial of degree $m$. Show that for all $w \in \R^d$ and $b \in \R$ the
+function $x \mapsto \sigma(w\cdot x + b)$ belongs to $\Pp_m(\R^d)$. Deduce
+$\Sigma(\sigma) \subseteq \Pp_m(\R^d)$.
+\item Deduce that $\overline{\Sigma(\sigma)} \subseteq \Pp_m(\R^d)$, and conclude that
+$\Sigma(\sigma)$ is not dense in $C(K)$ as soon as $K$ has nonempty interior. Exhibit explicitly a
+function of $C(K)$ that is not in the closure.
+\item Where exactly did you use that $K$ has nonempty interior? (Exercise \ref{ex:hypotheses} comes
+back to this.)
+\item Take $\sigma(t) = t^2$ and $d = 1$. Determine $\Sigma(\sigma)$ \emph{exactly}. Is the
+inclusion of item 1 an equality here?
+\item Still with $\sigma(t) = t^2$: show that a network of \emph{fixed} depth $L$ and arbitrary
+width realises only polynomials of degree $\le 2^{L-1}$, so that this class is not dense either.
+\item Now let the depth vary. Using $xy = \tfrac14\big((x+y)^2 - (x-y)^2\big)$, show that
+$\bigcup_{L,W}\Nn^{t^2}_{L,W}(d)$ contains \emph{every} polynomial, hence is dense in $C(K)$.
+\item Reconcile items 5 and 6, and answer: over which class of functions does the
+Leshno--Lin--Pinkus--Schocken theorem quantify? Why does the answer to that question change the
+truth value of the statement?
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+\section{Part C --- The functional-analytic skeleton}
+
+\begin{setting}
+Two results from the functional analysis course, usable without proof.
+
+\smallskip
+\textbf{(HB)} \emph{Hahn--Banach, analytic form.} A continuous linear functional defined on a
+subspace of a normed space $X$ extends to $X$ with the same norm.
+
+\smallskip
+\textbf{(RM)} \emph{Riesz--Markov.} For $K$ compact, every $L \in C(K)'$ is of the form
+$L(f) = \int_K f\,\dd\mu$ for a unique finite signed regular Borel measure $\mu$ on $K$, and
+$\norm{L}_{C(K)'} = \abs\mu(K)$. In particular $L = 0$ if and only if $\mu = 0$.
+\end{setting}
+
+\begin{definition}[Discriminatory]\label{def:discr}
+Let $K \subset \R^d$ be compact. A bounded measurable $\sigma : \R\to\R$ is \kw{discriminatory on
+$K$} if the only finite signed regular Borel measure $\mu$ on $K$ satisfying
+\[
+\int_K \sigma(w\cdot x + b)\,\dd\mu(x) = 0 \qquad \text{for all } w\in\R^d,\ b \in \R
+\]
+is $\mu = 0$.
+\end{definition}
+
+\begin{exercise}[From a closed proper subspace to a measure \tagcore]\label{ex:skeleton}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Let $X$ be a normed space and $V \subsetneq X$ a \emph{closed} subspace. Prove: there exists
+$L \in X'$ with $L \ne 0$ and $L|_V = 0$.
+\emph{(Take $x_0 \notin V$, set $\delta := \dist(x_0,V) > 0$, define $L$ on $V \oplus \R x_0$ by
+$L(v + t x_0) := t\,\delta$, check $\norm L \le 1$ and $L(x_0) = \delta$, then apply \textup{(HB)}.)}
+\item Why is it essential that $V$ be closed? Give a one-line reason, and say where in item 1 it is
+used.
+\item Let now $\sigma \in C(\R)$ be bounded, and suppose $\sigma$ is discriminatory on $K$ in the
+sense of Definition \ref{def:discr}. Prove that $\Sigma(\sigma)$ is dense in $C(K)$.
+\emph{You are assembling items 1 and \textup{(RM)}; the whole proof is six lines.}
+\item At which precise point of your argument did you use the continuity of $\sigma$?
+\item Suppose someone gives you Definition \ref{def:discr} only for $K = [0,1]^d$. What extra step
+would you need to obtain item 3 for a general compact $K$? (Do it.) Conclude that stating the
+definition on an arbitrary compact is not a matter of taste.
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+\section{Part D --- The heart: sigmoidal implies discriminatory}
+
+\begin{setting}
+For $w \in \R^d$ and $b \in \R$ write
+\[
+H^+_{w,b} := \{x \in K : w\cdot x + b > 0\}, \qquad
+\Pi_{w,b} := \{x \in K : w\cdot x + b = 0\} .
+\]
+You may use: the dominated convergence theorem for a finite signed measure; the fact that a
+continuous function on a compact interval is a uniform limit of step functions; and the
+\emph{uniqueness theorem for the Fourier--Stieltjes transform}: if $\mu$ is a finite signed Borel
+measure on $\R^d$ with $\int \ee^{\ii w\cdot x}\dd\mu(x) = 0$ for every $w \in \R^d$, then $\mu = 0$.
+\end{setting}
+
+\begin{exercise}[Every bounded sigmoidal function is discriminatory \tagcore]\label{ex:discr}
+Let $\sigma$ be bounded, measurable and sigmoidal, let $K \subset \R^d$ be compact, and let $\mu$ be
+a finite signed regular Borel measure on $K$ with
+\begin{equation}\label{eq:hyp}
+\int_K \sigma(w\cdot x + b)\,\dd\mu(x) = 0 \qquad \text{for all } w, b .
+\end{equation}
+The goal is to prove $\mu = 0$.
+
+\medskip
+\noindent\emph{Step 1: collapsing the sigmoid to a step.}
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Fix $w, b$ and $\varphi \in \R$, and set $\sigma_\lambda(x) := \sigma\big(\lambda(w\cdot x+b) + \varphi\big)$
+for $\lambda > 0$. Explain why \eqref{eq:hyp} gives $\int_K \sigma_\lambda \dd\mu = 0$ for every
+$\lambda > 0$. \emph{(Which $w$ and $b$ are you feeding to the hypothesis?)}
+\item Compute $\lim_{\lambda\to+\infty}\sigma_\lambda(x)$, distinguishing three cases according to
+the sign of $w\cdot x + b$. Note carefully what happens on $\Pi_{w,b}$.
+\item Justify the exchange of limit and integral. Which domination do you use, and where does the
+finiteness of $\mu$ enter?
+\item Deduce that
+\[
+\mu\big(H^+_{w,b}\big) + \sigma(\varphi)\,\mu\big(\Pi_{w,b}\big) = 0 \qquad\text{for every }\varphi\in\R,
+\]
+and then, by letting $\varphi \to \pm\infty$, that $\mu(H^+_{w,b}) = \mu(\Pi_{w,b}) = 0$ for all
+$w,b$.
+\end{enumerate}
+
+\medskip
+\noindent\emph{Step 2: from half-spaces to the Fourier transform.}
+\begin{enumerate}[label=\textbf{\arabic*.}, resume]
+\item Fix $w \in \R^d$. Show that $\{w\cdot x : x \in K\}$ is \emph{contained in} a compact interval
+$[\alpha,\beta]$, and give $\alpha$ and $\beta$. Why did I write ``contained in'' rather than
+``equal to''? Give an example.
+\item For $h : [\alpha,\beta]\to\R$ bounded measurable, set $F(h) := \int_K h(w\cdot x)\,\dd\mu(x)$.
+Show that $F$ is linear and that $\abs{F(h)} \le \norm h_\infty \abs\mu(K)$.
+\item Using Step 1, show that $F$ vanishes on $\ind_{(s,+\infty)}$ and on $\ind_{[s,+\infty)}$ for
+every $s$. Deduce that $F$ vanishes on the indicator of every interval, then on every step function.
+\item Deduce that $F(h) = 0$ for every $h \in C([\alpha,\beta])$. Where is item 7 used?
+\item Apply this to $h = \cos$ and $h = \sin$ and conclude that $\mu = 0$.
+\end{enumerate}
+
+\medskip
+\noindent\emph{Step 3: auditing the hypotheses.}
+\begin{enumerate}[label=\textbf{\arabic*.}, resume]
+\item Go back through your proof and say, for each of the three hypotheses on $\sigma$ --- bounded,
+measurable, sigmoidal --- exactly where it was used. Is continuity of $\sigma$ used anywhere?
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+\section{Part E --- Assembling, and reading the result}
+
+\begin{exercise}[Cybenko's theorem \tagcore]\label{ex:cybenko}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Combine Exercises \ref{ex:skeleton} and \ref{ex:discr} into a single statement and write out
+its proof in at most ten lines. This is the theorem of Cybenko (1989).
+\item Your proof is by contradiction. Suppose a colleague hands you $f \in C([0,1]^2)$ and
+$\varepsilon = 10^{-3}$ and asks for an explicit network. What does your proof give them?
+\item Does the theorem provide any bound on the number $n$ of neurons as a function of
+$\varepsilon$? Read your proof again and identify the precise step at which all quantitative
+information is lost.
+\item Does the theorem apply to $\sigma = \ReLU$? Justify your answer from the hypotheses, and say
+what this suggests about how sharp those hypotheses are.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Reading the theorem critically \tagcore]\label{ex:reading}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item The theorem concerns $\Sigma(\sigma) = \bigcup_n \Sigma_n(\sigma)$. Give a heuristic
+dimension-counting argument suggesting that $\Sigma_n(\sigma)$, for \emph{fixed} $n$, cannot be
+dense in $C(K)$. Why is turning this into a proof delicate? \emph{(Recall Remark 1.7 of the lecture
+notes.)}
+\item A PINN will be trained by minimising a functional over $\theta$. List the three things a
+practitioner would want to know that Cybenko's theorem does not address.
+\item In one sentence each, say which later session takes charge of each of the three.
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+\section{Part F --- The complete characterisation}
+
+\begin{setting}
+\textbf{(SW)} \emph{Stone--Weierstrass.} A subalgebra of $C(K)$ that contains the constants and
+separates the points of $K$ is dense in $C(K)$.
+
+\smallskip
+We shall prove the sufficiency half of the Leshno--Lin--Pinkus--Schocken theorem in the case
+$\sigma \in C^\infty(\R)$. Throughout the exercise, $V := \overline{\Sigma(\sigma)}$, the closure
+being taken in $C(K)$; note that $V$ is a closed linear subspace, so it is stable under uniform
+limits --- this is the only property of $V$ that will be used, and it will be used constantly.
+\end{setting}
+
+\begin{exercise}[LLPS, smooth case \tagcore]\label{ex:llps}
+Let $\sigma \in C^\infty(\R)$ be non-polynomial and $K \subset \R^d$ compact.
+
+\medskip
+\noindent\emph{Step 1: differentiating inside the class.}
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Fix $w \in \R^d$, $b \in \R$, $\lambda \in \R$ and $h \ne 0$. Show that
+\[
+x \longmapsto \frac{\sigma\big((\lambda+h)\,w\cdot x + b\big) - \sigma\big(\lambda\,w\cdot x + b\big)}{h}
+\]
+belongs to $\Sigma_2(\sigma)$, hence to $V$.
+\item Show that as $h \to 0$ this converges \emph{uniformly on $K$} to
+$x \mapsto (w\cdot x)\,\sigma'(\lambda\,w\cdot x + b)$. \emph{Uniform convergence is the whole
+point; say precisely why compactness of $K$ gives it.} Deduce that this limit lies in $V$.
+\item Iterate to obtain, for every $k \in \N$,
+\[
+x \longmapsto (w\cdot x)^k\, \sigma^{(k)}\big(\lambda\, w\cdot x + b\big) \ \in\ V .
+\]
+\item Show that if $\sigma \in C^\infty$ is non-polynomial then for every $k$ there exists
+$b_k \in \R$ with $\sigma^{(k)}(b_k) \ne 0$. \emph{(Argue by contraposition.)}
+\item Deduce that $(w\cdot x)^k \in V$ for every $k \in \N$ and every $w \in \R^d$.
+\end{enumerate}
+
+\medskip
+\noindent\emph{Step 2: from ridge monomials to all polynomials.}
+\begin{enumerate}[label=\textbf{\arabic*.}, resume]
+\item Prove the polarisation identity: for $y_1,\dots,y_k$ in a commutative ring,
+\[
+k!\, y_1 y_2\cdots y_k = \sum_{S \subseteq \{1,\dots,k\}} (-1)^{k-\abs S}\Big(\sum_{j\in S} y_j\Big)^{k}.
+\]
+\emph{(Expand by the multinomial formula and show that a monomial in which some $y_j$ is absent
+contributes $0$ after summation over $S$.)} Check it by hand for $k = 2$ and $k=3$.
+\item Deduce that every monomial $x_{i_1}\cdots x_{i_k}$ belongs to $V$, and then that
+$\Pp(\R^d)\subseteq V$.
+\item Conclude using \textup{(SW)}. Verify each hypothesis of \textup{(SW)} explicitly: subalgebra,
+constants, separation of points.
+\end{enumerate}
+
+\medskip
+\noindent\emph{Step 3: what the smoothness bought.}
+\begin{enumerate}[label=\textbf{\arabic*.}, resume]
+\item Where did you use $\sigma \in C^\infty$ rather than merely $\sigma \in C^0$? Sketch, in two or
+three sentences, what one would have to do to treat a continuous $\sigma$.
+\item Combine with Exercise \ref{ex:poly} to state the full theorem: a necessary and sufficient
+condition on $\sigma \in C(\R)$ for $\Sigma(\sigma)$ to be dense in $C(K)$ for every compact $K$ and
+every $d$.
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+\section{Part G --- Testing the hypotheses}
+
+\begin{exercise}[What each hypothesis is doing \tagextra]\label{ex:hypotheses}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item \emph{Non-polynomiality is global, not local.} Does there exist $\sigma \in C^\infty(\R)$,
+non-polynomial, with $\sigma^{(k)}(0) = 0$ for every $k \ge 3$? Exhibit one. Does the proof of
+Exercise \ref{ex:llps} survive? Which step would have broken if we had insisted on taking
+$\lambda = b = 0$ throughout?
+\item \emph{Interior matters.} Let $K = \{0\} \cup \{e_1\} \subset \R^d$, two points. Identify
+$C(K)$, and determine whether $\Sigma(\sigma)$ is dense in $C(K)$ when $\sigma(t) = t^2$. Compare
+with Exercise \ref{ex:poly}, item 2, and explain the apparent conflict.
+\item \emph{Compactness matters.} In Exercise \ref{ex:discr}, item 6, we used that $K$ is compact.
+What breaks in the argument if $K = \R^d$? Is the conclusion still true for, say, bounded continuous
+functions on $\R^d$ with the sup norm?
+\item \emph{Boundedness is not an extra hypothesis, for continuous $\sigma$.} Show that a continuous
+$\sigma : \R \to \R$ admitting finite limits at $+\infty$ and $-\infty$ is bounded. Deduce that in
+Cybenko's theorem the word ``bounded'' may be dropped when $\sigma$ is assumed continuous and
+sigmoidal.
+\item \emph{Where continuity really sits.} Exercise \ref{ex:discr} never used continuity of
+$\sigma$. Exercise \ref{ex:skeleton} did. Explain in one sentence the division of labour, and what
+would go wrong in Exercise \ref{ex:skeleton} for a discontinuous sigmoidal $\sigma$ such as
+$\ind_{[0,\infty)}$.
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+\newpage
+\section{Hints}
+
+\noindent
+\textbf{Exercise \ref{ex:warmup}.}
+\emph{3.} Treat $x > b$, $x \in (a,b)$, $x < a$ separately and use the two limits defining
+sigmoidality. \emph{4.} Step functions are dense in $C([0,1])$ for the uniform norm --- or invoke
+uniform continuity directly. \emph{5.} In $d \ge 2$ a ridge function is constant along a whole
+hyperplane; what would the analogue of a ``bump'' be, and can you build a bump on a bounded region
+out of finitely many of them?
+
+\medskip\noindent
+\textbf{Exercise \ref{ex:poly}.}
+\emph{2.} A function that is not polynomial on any neighbourhood: take $x \mapsto \abs{x_1 - a}$.
+\emph{4.} $(wx+b)^2 = w^2x^2 + 2wbx + b^2$; now vary $w$ and $b$. \emph{6.} Build products, then
+monomials, then sums.
+
+\medskip\noindent
+\textbf{Exercise \ref{ex:skeleton}.}
+\emph{1.} For $v \in V$ and $t \ne 0$, $\norm{v + tx_0} = \abs t\,\norm{x_0 + v/t} \ge \abs t\,\delta$.
+\emph{3.} Argue by contradiction: if $\overline{\Sigma(\sigma)} \ne C(K)$, produce $L$, then $\mu$,
+then apply the hypothesis to the functions $\sigma(w\cdot{\,\cdot\,}+b)$, which lie in
+$\Sigma(\sigma)$.
+
+\medskip\noindent
+\textbf{Exercise \ref{ex:discr}.}
+\emph{1.} Feed $\lambda w$ and $\lambda b + \varphi$. \emph{4.} The limit obtained in item 3 does
+not depend on $\varphi$, but the expression does --- that is what lets you vary $\varphi$.
+\emph{8.} $\ind_{(s,t]} = \ind_{(s,\infty)} - \ind_{(t,\infty)}$. \emph{9.} A uniform limit of
+functions on which a bounded linear functional vanishes.
+
+\medskip\noindent
+\textbf{Exercise \ref{ex:llps}.}
+\emph{2.} $w\cdot x$ ranges over a bounded set; $\sigma'$ is uniformly continuous on compacts.
+\emph{4.} If for some $k$ one had $\sigma^{(k)} \equiv 0$ on $\R$, what is $\sigma$?
+\emph{6.} In the expansion of $(\sum_{j\in S}y_j)^k$, fix a monomial $y^\alpha$ and sum its
+coefficient over all $S$ containing the support of $\alpha$; if the support is proper you are
+summing $(-1)^{k-\abs S}$ over a nonempty binomial family.
+
+\medskip\noindent
+\textbf{Exercise \ref{ex:hypotheses}.}
+\emph{1.} A function that is flat to infinite order at a point, glued to something non-polynomial.
+\emph{2.} $C(K) \cong \R^2$; you only need to hit two values. \emph{4.} Continuity gives
+boundedness on a compact; the limits give it outside.
+
+% ================================================================
+
+\ifsolutions
+\newpage
+\section{Solutions}
+
+\subsection*{Exercise \ref{ex:warmup}}
+
+\textbf{1.} $c$ scales the output (vertical amplitude and, if $c<0$, a reflection); $b$ translates
+horizontally, the graph being centred at $x = -b/w$; $w$ controls the \emph{steepness}, the slope at
+the centre being $cw\,\sigma'(0)$. Large $\abs w$ makes the transition sharp --- this is the
+observation the whole of Part D turns into a proof.
+
+\textbf{2.} Take $w = 0$, $b = t_0$: the function $x \mapsto \sigma(0\cdot x + t_0) = \sigma(t_0)$
+is constant and nonzero, so $x \mapsto \gamma\,\sigma(t_0)^{-1}\sigma(0\cdot x + t_0) = \gamma$ for
+any $\gamma\in\R$, and this is an element of $\Sigma_1(\sigma)$.
+
+\textbf{3.} The left-hand side is $\sigma(w_1x+b_1) - \sigma(w_2x+b_2)$ with $w_1 = w_2 = \lambda$,
+$b_1 = -\lambda a$, $b_2 = -\lambda b$: an element of $\Sigma_2(\sigma)$ with coefficients $\pm1$.
+For the limit, if $x > b$ then both arguments tend to $+\infty$ and the difference tends to
+$1 - 1 = 0$; if $a < x < b$ then $\lambda(x-a)\to+\infty$ and $\lambda(x-b)\to-\infty$, giving
+$1 - 0 = 1$; if $x < a$ both tend to $-\infty$, giving $0 - 0 = 0$. At $x = a$ or $x=b$ the
+behaviour depends on $\sigma$ at a fixed point and no limit is claimed.
+
+\textbf{4.} Let $f \in C([0,1])$ and $\varepsilon > 0$. By uniform continuity there is a step
+function $s = \sum_{i} \gamma_i \ind_{(a_i,b_i)}$ with $\norm{f - s}_\infty \le \varepsilon/2$ off a
+finite set. By item 3 each $\ind_{(a_i,b_i)}$ is a pointwise limit of elements of
+$\Sigma_2(\sigma)$, so a finite combination approximates $s$. The implicit classical result is the
+density of step functions in $C([0,1])$ for the uniform norm.
+
+\emph{Two honest caveats to note, since they explain the shape of the real proof.} The convergence
+in item 3 is pointwise off $\{a,b\}$, not uniform --- near the jump the approximation is always
+bad --- so this sketch needs care to become a proof even in $d=1$. And the number of neurons
+produced is that of the step approximation, which is where a rate would come from if one pushed the
+argument; Cybenko's proof abandons that possibility entirely.
+
+\textbf{5.} In $d \ge 2$, $x \mapsto \sigma(w\cdot x + b)$ is constant on every hyperplane
+$w\cdot x = \text{const}$, so it has no localisation transverse to $w$: the object built in item 3
+is a \emph{slab}, infinite in the $d-1$ directions orthogonal to $w$, not a bump. One can intersect
+slabs to localise, but intersection is not a linear operation, and $\Sigma(\sigma)$ is a linear
+span: sums of slab functions do not produce an indicator of a box. Some genuinely different idea is
+needed --- either the Fourier/ridge decomposition of Part D, or the differentiation trick of Part F.
+
+\subsection*{Exercise \ref{ex:poly}}
+
+\textbf{1.} If $\sigma(t) = \sum_{j=0}^m a_jt^j$ then
+$\sigma(w\cdot x+b) = \sum_j a_j (w\cdot x + b)^j$, and $(w\cdot x+b)^j$ expands into a polynomial
+in $x$ of total degree $\le j \le m$. A finite linear combination of such functions stays in
+$\Pp_m(\R^d)$, which is a vector space; hence $\Sigma(\sigma)\subseteq\Pp_m(\R^d)$.
+
+\textbf{2.} $\Pp_m(\R^d)$ is finite-dimensional, hence closed in $C(K)$, so
+$\overline{\Sigma(\sigma)}\subseteq\Pp_m(\R^d)$. If $K$ has nonempty interior, pick $a$ interior and
+consider $f(x) = \abs{x_1 - a_1}$, which is continuous on $K$ but coincides with no polynomial on
+any neighbourhood of $a$ (a polynomial is $C^\infty$, $f$ is not differentiable at $x_1 = a_1$).
+Hence $f \notin \Pp_m(\R^d)$ and $\Sigma(\sigma)$ is not dense.
+
+\textbf{3.} Only in the last step: to say that a function on $K$ is not the restriction of a
+polynomial one needs enough room. On a finite set, every function is a polynomial restriction, and
+the conclusion fails --- see Exercise \ref{ex:hypotheses}, item 2.
+
+\textbf{4.} $\sigma(wx+b) = (wx+b)^2 = w^2x^2 + 2wbx + b^2$. Taking $b = 0$, $w=1$ gives $x^2$;
+$w = 0$, $b = 1$ gives the constant $1$; $w = b = 1$ gives $x^2+2x+1$, whence $x$ by subtraction.
+So $\Sigma(\sigma) \supseteq \Pp_2(\R)$, and the reverse inclusion is item 1: the inclusion is an
+\emph{equality}, $\Sigma(t^2) = \Pp_2(\R)$.
+
+\textbf{5.} By induction on the layers: an affine map sends polynomials of degree $\le D$ to
+polynomials of degree $\le D$, and $t \mapsto t^2$ doubles the degree. Starting from degree $1$
+(the first affine map), after $L-1$ hidden layers the degree is at most $2^{L-1}$. So
+$\Nn^{t^2}_{L,W}(d)\subseteq \Pp_{2^{L-1}}(\R^d)$ for every width $W$, and this is a
+finite-dimensional, hence closed, proper subspace of $C(K)$ when $K$ has interior: not dense.
+
+\textbf{6.} The identity $xy = \tfrac14((x+y)^2 - (x-y)^2)$ says that one hidden layer of two
+quadratic units followed by a linear combination computes the product of two quantities available at
+that layer. Starting from the inputs $x_1,\dots,x_d$ and the constant $1$ (available as
+$\sigma(0\cdot x + 1)$), one layer produces all degree-two monomials, $m$ layers of pairwise
+products produce any monomial of degree $\le 2^m$, and the output layer sums. Hence
+$\bigcup_{L,W}\Nn^{t^2}_{L,W}(d)\supseteq \Pp(\R^d)$, dense in $C(K)$ by Stone--Weierstrass.
+
+\textbf{7.} No conflict: density fails at each \emph{fixed} depth and holds only for the union over
+all depths. LLPS quantifies over $\Sigma(\sigma)$, the span of a \emph{single} hidden layer, and for
+that class non-polynomiality is necessary and sufficient. Items 5--6 show that the analogous
+statement for the union over all depths is false --- $t^2$ fails the LLPS criterion yet deep
+quadratic networks are dense. Keeping track of the class a theorem quantifies over is not pedantry
+here: it changes the truth value.
+
+\subsection*{Exercise \ref{ex:skeleton}}
+
+\textbf{1.} Let $x_0 \in X\setminus V$. Since $V$ is closed, $\delta := \dist(x_0,V) > 0$. On
+$W := V \oplus \R x_0$ define $L(v + tx_0) := t\delta$; this is well defined because the sum is
+direct ($x_0\notin V$), and linear. For $t \ne 0$,
+\[
+\norm{v + tx_0} = \abs t \cdot \norm{x_0 + v/t} \ \ge\ \abs t\,\delta = \abs{L(v+tx_0)},
+\]
+since $-v/t \in V$; for $t = 0$ the inequality is trivial. So $\norm{L}_{W'}\le 1$ and $L$ is
+continuous. By (HB) extend it to $X$ with the same norm. Then $L|_V = 0$ and $L(x_0) = \delta \ne 0$,
+so $L \ne 0$.
+
+\textbf{2.} Closedness is used exactly once, to get $\delta > 0$: if $V$ were merely a subspace with
+$\overline V = X$, every $x_0$ would be at distance $0$ from $V$ and the construction would produce
+$L = 0$. Conceptually: a dense subspace is annihilated only by the zero functional, which is the
+whole point.
+
+\textbf{3.} $S := \Sigma(\sigma)$ is a linear subspace of $C(K)$ --- note this uses that
+$x\mapsto\sigma(w\cdot x+b)$ is \emph{continuous} on $K$, so that $S \subseteq C(K)$ at all.
+Suppose $\overline S \ne C(K)$. Then $\overline S$ is a closed proper subspace, so by item 1 there
+is $L \in C(K)'$, $L \ne 0$, vanishing on $\overline S$. By (RM), $L(f) = \int_K f\dd\mu$ for a
+finite signed regular Borel $\mu$, and $\mu \ne 0$ since $L\ne0$. For all $w,b$ the function
+$\sigma(w\cdot{\,\cdot\,}+b)$ lies in $S$, so $\int_K\sigma(w\cdot x+b)\dd\mu(x) = 0$. As $\sigma$
+is discriminatory on $K$, $\mu = 0$ --- a contradiction. Hence $\overline S = C(K)$.
+
+\textbf{4.} At the very first line: without continuity, $\sigma(w\cdot{\,\cdot\,}+b)$ need not be an
+element of $C(K)$, and neither $S \subseteq C(K)$ nor the application of $L$ to it makes sense. This
+is the only place. Everything else --- including Part D --- works for measurable $\sigma$.
+
+\textbf{5.} One would first need $K\subseteq[0,1]^d$ (a translation and dilation, harmless), and
+then to extend the measure $\mu$, which lives on $K$, to a measure $\tilde\mu$ on $[0,1]^d$ by
+$\tilde\mu(A) := \mu(A\cap K)$. This $\tilde\mu$ is a finite signed regular Borel measure on the
+cube, it is nonzero if $\mu$ is, and
+$\int_{[0,1]^d}\sigma(w\cdot x+b)\dd\tilde\mu = \int_K\sigma(w\cdot x+b)\dd\mu = 0$, so the cube
+version applies and gives $\tilde\mu = 0$, hence $\mu = 0$.
+
+The step is harmless but it \emph{is} a step, and it is routinely omitted. Stating
+Definition \ref{def:discr} on an arbitrary compact costs nothing --- the proof of Exercise
+\ref{ex:discr} uses only compactness --- and removes the need for it entirely.
+
+\subsection*{Exercise \ref{ex:discr}}
+
+\textbf{1.} Apply \eqref{eq:hyp} with $w' := \lambda w$ and $b' := \lambda b + \varphi$; then
+$\sigma(w'\cdot x + b') = \sigma(\lambda(w\cdot x+b)+\varphi) = \sigma_\lambda(x)$.
+
+\textbf{2.} If $w\cdot x + b > 0$ then $\lambda(w\cdot x+b)+\varphi \to +\infty$ and
+$\sigma_\lambda(x)\to 1$; if $w\cdot x + b< 0$ it tends to $-\infty$ and $\sigma_\lambda(x)\to 0$;
+if $w\cdot x + b = 0$ then $\sigma_\lambda(x) = \sigma(\varphi)$ for \emph{every} $\lambda$, so the
+limit is $\sigma(\varphi)$. The third case is the one that carries the information.
+
+\textbf{3.} $\abs{\sigma_\lambda}\le\norm\sigma_\infty$ uniformly in $\lambda$ and $x$, and the
+constant $\norm\sigma_\infty$ is $\abs\mu$-integrable because $\abs\mu(K)<\infty$. Dominated
+convergence for the finite signed measure $\mu$ (apply it to the Jordan decomposition
+$\mu = \mu^+-\mu^-$) gives the exchange.
+
+\textbf{4.} Passing to the limit in $\int\sigma_\lambda\dd\mu = 0$:
+\[
+0 = \int_K \Big(\ind_{H^+_{w,b}} + \sigma(\varphi)\ind_{\Pi_{w,b}}\Big)\dd\mu
+= \mu(H^+_{w,b}) + \sigma(\varphi)\mu(\Pi_{w,b}).
+\]
+This holds for every $\varphi$. Letting $\varphi\to-\infty$ gives $\sigma(\varphi)\to0$, hence
+$\mu(H^+_{w,b}) = 0$; letting $\varphi\to+\infty$ gives $\sigma(\varphi)\to1$, hence
+$\mu(H^+_{w,b})+\mu(\Pi_{w,b}) = 0$, so $\mu(\Pi_{w,b}) = 0$ too. Note that the limit function does
+not depend on $\varphi$ in the first two cases, but the value on $\Pi$ does: this is exactly what
+makes the two limits informative.
+
+\textbf{5.} $x\mapsto w\cdot x$ is continuous and $K$ compact, so the image is compact, hence
+contained in $[\alpha,\beta]$ with $\alpha := \min_K w\cdot x$ and $\beta := \max_K w\cdot x$. It
+need not \emph{equal} $[\alpha,\beta]$ because $K$ may be disconnected: for $K = \{0\}\cup\{1\}
+\subset\R$ and $w = 1$, the image is $\{0,1\}$, not $[0,1]$. Nothing in the sequel needs equality,
+only that a compact interval containing the image exists.
+
+\textbf{6.} Linearity is clear. For the bound,
+$\abs{F(h)} = \abs{\int_K h(w\cdot x)\dd\mu(x)} \le \int_K \abs{h(w\cdot x)}\dd\abs\mu(x)
+\le \norm h_\infty\,\abs\mu(K)$.
+
+\textbf{7.} $\{x \in K : w\cdot x > s\} = H^+_{w,-s}$ and
+$\{x\in K : w\cdot x \ge s\} = H^+_{w,-s}\cup\Pi_{w,-s}$, so
+$F(\ind_{(s,\infty)}) = \mu(H^+_{w,-s}) = 0$ and
+$F(\ind_{[s,\infty)}) = \mu(H^+_{w,-s})+\mu(\Pi_{w,-s}) = 0$ by Step 1. For an interval,
+$\ind_{(s,t]} = \ind_{(s,\infty)} - \ind_{(t,\infty)}$ and similarly for the other three types, so
+$F$ vanishes on every interval indicator by linearity, hence on every step function.
+
+\textbf{8.} Let $h\in C([\alpha,\beta])$. By uniform continuity there are step functions $s_n$ with
+$\norm{h - s_n}_\infty\to0$. Then $\abs{F(h)} = \abs{F(h-s_n)}\le\norm{h-s_n}_\infty\abs\mu(K)\to0$,
+so $F(h) = 0$. Item 6 is used precisely here: without the bound $\abs{F(h)}\le\norm h_\infty\abs\mu(K)$
+one could not pass from step functions to their uniform limits.
+
+\textbf{9.} Taking $h = \cos$ and $h=\sin$ restricted to $[\alpha,\beta]$, which are continuous,
+\[
+\widehat\mu(w) := \int_K \ee^{\ii w\cdot x}\dd\mu(x)
+= \int_K\cos(w\cdot x)\dd\mu(x) + \ii\int_K\sin(w\cdot x)\dd\mu(x) = F(\cos)+\ii F(\sin) = 0 .
+\]
+This holds for every $w\in\R^d$ (each $w$ has its own $[\alpha,\beta]$, which is harmless). By the
+uniqueness theorem for the Fourier--Stieltjes transform, $\mu = 0$.
+
+\textbf{10.} \emph{Bounded} is used in item 3, for the domination. \emph{Measurable} is used
+wherever $\sigma_\lambda$ is integrated, i.e.\ in items 1 and 3. \emph{Sigmoidal} is used twice: in
+item 2 to identify the pointwise limit, and in item 4 to let $\sigma(\varphi)$ sweep from $0$ to
+$1$ --- it is the existence of \emph{two distinct} limits that makes the two passages informative;
+had $\sigma$ the same limit at both ends, item 4 would give a single equation instead of two.
+Continuity of $\sigma$ is used \emph{nowhere} in this exercise.
+
+\subsection*{Exercise \ref{ex:cybenko}}
+
+\textbf{1.} \emph{Theorem (Cybenko, 1989).} Let $\sigma\in C(\R)$ be bounded and sigmoidal and let
+$K\subset\R^d$ be compact. Then $\Sigma(\sigma)$ is dense in $C(K)$.
+
+\emph{Proof.} $S := \Sigma(\sigma)$ is a linear subspace of $C(K)$, the functions
+$\sigma(w\cdot{\,\cdot\,}+b)$ being continuous. Suppose $\overline S\ne C(K)$. By Exercise
+\ref{ex:skeleton}, item 1, there is $L\in C(K)'$, $L\ne0$, with $L|_{\overline S} = 0$. By (RM)
+there is a finite signed regular Borel measure $\mu\ne0$ on $K$ with $L(f) = \int_K f\dd\mu$. Since
+$\sigma(w\cdot{\,\cdot\,}+b)\in S$ for all $w,b$, we get $\int_K\sigma(w\cdot x+b)\dd\mu(x) = 0$ for
+all $w,b$. By Exercise \ref{ex:discr}, $\sigma$ is discriminatory on $K$, so $\mu = 0$ --- a
+contradiction. Hence $\overline S = C(K)$. $\square$
+
+\textbf{2.} Nothing. The proof shows that the assumption ``not dense'' is contradictory; it never
+constructs an approximant. Handed $f$ and $\varepsilon$, one knows a network exists and has no
+procedure to find one, nor even to tell how large it must be.
+
+\textbf{3.} No bound. The quantitative information is destroyed at the passage through Hahn--Banach:
+from that point on the argument manipulates an abstract functional and a measure, and $n$ has
+disappeared from the discussion entirely --- indeed $n$ never appears in the proof at all, since we
+work with $\Sigma(\sigma) = \bigcup_n\Sigma_n(\sigma)$ from the first line. Recovering a rate
+requires a completely different argument: this is Barron's theorem, §\,3 of the lecture notes.
+
+\textbf{4.} No: $\ReLU$ is unbounded, so it is not sigmoidal in the sense used here, and both
+hypotheses of the theorem fail. This shows the hypotheses are \emph{not} sharp --- $\ReLU$ does
+generate a dense class, as LLPS shows, since it is continuous and not a polynomial. Cybenko's
+hypotheses are those his method needs (boundedness for the domination, sigmoidality for the step
+limit), not those the conclusion needs. This is a healthy thing for students to see: a theorem's
+hypotheses often describe its proof rather than its truth.
+
+\subsection*{Exercise \ref{ex:reading}}
+
+\textbf{1.} $\Sigma_n(\sigma)$ is the image of $\R^{n(d+2)}$ under the map
+$(c_i,w_i,b_i)\mapsto\sum_i c_i\sigma(w_i\cdot{\,\cdot\,}+b_i)$: a set parametrised by finitely many
+numbers inside the infinite-dimensional space $C(K)$. One expects such a set to be ``thin'', and in
+particular not dense.
+
+Turning this into a proof is delicate because the parameter space is \emph{unbounded}: the image of
+a non-compact set under a continuous map need not be closed, and indeed Remark 1.7 of the lecture
+notes records that $\Sigma_n(\sigma)$ is in general \emph{not} closed. So one cannot argue ``finite
+dimensional, hence closed, hence not dense'' as in Exercise \ref{ex:poly}. A correct treatment needs
+genuine work; see the references given in that remark.
+
+\textbf{2.} (i) How many neurons are needed for accuracy $\varepsilon$, and how does that number
+depend on $d$? (ii) Can the good parameters be \emph{found} by an optimisation algorithm? (iii) Is
+it enough to approximate $u$, given that a PINN must approximate $\Dd[u]$, i.e.\ derivatives?
+
+\textbf{3.} (i) is §\,3 and §\,4 of the lecture notes (Barron; Sobolev-norm rates), and is taken
+further in Session 4. (ii) is Session 6, which analyses training and is where the practical gap
+lies. (iii) is §\,4 of the lecture notes, and governs the choice of activation via Session 1,
+Proposition 1.8.
+
+\subsection*{Exercise \ref{ex:llps}}
+
+\textbf{1.} The two terms are $\sigma(w'\cdot x + b)$ with $w' = (\lambda+h)w$ and $w'' = \lambda w$
+respectively, so each lies in $\Sigma_1(\sigma)$; their difference divided by $h$ lies in
+$\Sigma_2(\sigma)\subseteq V$.
+
+\textbf{2.} Set $u := w\cdot x$, which ranges over a compact interval $I$ as $x$ ranges over $K$.
+For fixed $b$, the map $(\lambda,u)\mapsto \sigma(\lambda u + b)$ is $C^\infty$; by the mean value
+theorem,
+\[
+\frac{\sigma((\lambda+h)u+b)-\sigma(\lambda u+b)}{h} = u\,\sigma'(\theta_{h,u}\,u + b)
+\]
+for some $\theta_{h,u}$ between $\lambda$ and $\lambda+h$. As $\abs u$ is bounded on $I$ and
+$\sigma'$ is uniformly continuous on the compact set $\{\theta u + b : \abs{\theta-\lambda}\le1,\ u \in I\}$,
+the right-hand side converges to $u\,\sigma'(\lambda u + b)$ uniformly in $u \in I$, hence uniformly
+in $x \in K$. Compactness of $K$ is what makes $I$ compact and the convergence uniform rather than
+merely pointwise. Since $V$ is closed for the uniform norm, the limit is in $V$.
+
+\textbf{3.} Repeat item 2 with $\sigma$ replaced by $\sigma'$, then $\sigma''$, and so on: each
+differentiation in $\lambda$ multiplies by a factor $(w\cdot x)$ and raises the order of the
+derivative by one. An induction on $k$ gives
+$(w\cdot x)^k\sigma^{(k)}(\lambda w\cdot x + b)\in V$; all the intermediate functions are in $V$ and
+$V$ is closed, so nothing escapes.
+
+\textbf{4.} Contraposition. Suppose that for some $k$ we have $\sigma^{(k)}(b) = 0$ for every
+$b\in\R$, i.e.\ $\sigma^{(k)}\equiv0$. Integrating $k$ times shows $\sigma$ is a polynomial of
+degree $< k$, contradicting the hypothesis. Hence for every $k$ there is $b_k$ with
+$\sigma^{(k)}(b_k)\ne0$. \emph{Note the quantifiers: non-polynomiality is a statement about
+$\sigma^{(k)}$ on all of $\R$, not at a point.}
+
+\textbf{5.} Take $\lambda = 0$ and $b = b_k$ in item 3: the function
+$x\mapsto \sigma^{(k)}(b_k)\,(w\cdot x)^k$ lies in $V$, and $\sigma^{(k)}(b_k)\ne0$ is a nonzero
+scalar, so $(w\cdot x)^k \in V$ by linearity.
+
+\textbf{6.} Expand each $(\sum_{j\in S}y_j)^k$ by the multinomial formula. A monomial
+$y^\alpha = y_1^{\alpha_1}\cdots y_k^{\alpha_k}$ with $\abs\alpha = k$ appears in the term indexed
+by $S$ if and only if $\mathrm{supp}(\alpha)\subseteq S$, always with the same multinomial
+coefficient $\binom{k}{\alpha}$. Its total coefficient in the sum is therefore
+\[
+\binom{k}{\alpha}\sum_{S \supseteq \mathrm{supp}(\alpha)}(-1)^{k-\abs S}
+= \binom{k}{\alpha}\sum_{j=0}^{k-p}\binom{k-p}{j}(-1)^{k-p-j}
+= \binom{k}{\alpha}\,(1-1)^{k-p},
+\]
+where $p := \abs{\mathrm{supp}(\alpha)}$ and we summed over the $\binom{k-p}{j}$ ways of adjoining
+$j$ further indices. This vanishes unless $p = k$, i.e.\ unless every $y_j$ occurs, which forces
+$\alpha = (1,\dots,1)$ and leaves the coefficient $\binom{k}{1,\dots,1} = k!$. Hence the sum equals
+$k!\,y_1\cdots y_k$.
+
+Check for $k=2$: $(y_1+y_2)^2 - y_1^2 - y_2^2 = 2y_1y_2$. \checkmark\ For $k = 3$:
+$(y_1+y_2+y_3)^3 - \sum_{i<j}(y_i+y_j)^3 + \sum_i y_i^3 = 6y_1y_2y_3$, as one checks by expanding.
+
+\textbf{7.} Fix $i_1,\dots,i_k\in\{1,\dots,d\}$ and apply the identity with $y_j := x_{i_j}$. For
+$S\subseteq\{1,\dots,k\}$ put $w_S := \sum_{j\in S}e_{i_j}\in\R^d$, so that
+$\sum_{j\in S}y_j = w_S\cdot x$. The identity reads
+\[
+k!\;x_{i_1}\cdots x_{i_k} = \sum_{S}(-1)^{k-\abs S}\,(w_S\cdot x)^k,
+\]
+and every term on the right lies in $V$ by item 5. Since $V$ is a vector space,
+$x_{i_1}\cdots x_{i_k}\in V$. Every monomial of every degree is of this form (constants being the
+case $k=0$), so by linearity $\Pp(\R^d)\subseteq V$.
+
+\textbf{8.} $\Pp(\R^d)$ restricted to $K$ is a subalgebra of $C(K)$: it is a vector space, stable
+under products. It contains the constants. It separates points: if $x\ne y$ in $K$, some coordinate
+differs, say $x_i\ne y_i$, and the polynomial $z\mapsto z_i$ separates them. By (SW), $\Pp(\R^d)$ is
+dense in $C(K)$. As $\Pp(\R^d)\subseteq V$ and $V$ is closed, $V = C(K)$, i.e.\ $\Sigma(\sigma)$ is
+dense.
+
+\textbf{9.} Smoothness is used in items 3 and 4: item 3 iterates the differentiation $k$ times and
+needs $\sigma^{(k)}$ to exist for all $k$; item 4 characterises non-polynomiality through the
+$\sigma^{(k)}$. For continuous $\sigma$ one regularises: convolve with a mollifier
+$\varphi\in C_c^\infty$ to get $\sigma*\varphi\in C^\infty$, observe that
+$\Sigma(\sigma*\varphi)\subseteq\overline{\Sigma(\sigma)}$ (a convolution is a limit of Riemann sums
+of translates, and translates of $\sigma$ stay in $\Sigma(\sigma)$ once composed with $w\cdot x+b$),
+and check that if $\sigma$ is not a polynomial then $\sigma*\varphi$ is not a polynomial for some
+$\varphi$. Then apply the smooth case. The details are in Pinkus (1999), §\,3; they are more
+delicate than this sketch suggests, which is why we did not do them.
+
+\textbf{10.} \emph{Theorem (Leshno, Lin, Pinkus, Schocken, 1993).} Let $\sigma\in C(\R)$. Then
+$\Sigma(\sigma)$ is dense in $C(K)$ for every compact $K\subset\R^d$ and every $d\ge1$ if and only
+if $\sigma$ is not a polynomial. The ``only if'' is Exercise \ref{ex:poly}; the ``if'' is this
+exercise for $\sigma\in C^\infty$, and item 9 for the general case.
+
+\subsection*{Exercise \ref{ex:hypotheses}}
+
+\textbf{1.} Yes: take
+\[
+\sigma(t) := \begin{cases} \ee^{-1/t^2} & t > 0,\\ 0 & t\le 0.\end{cases}
+\]
+This is $C^\infty$, all its derivatives vanish at $0$ (in particular for $k\ge3$), and it is not a
+polynomial since it vanishes on a half-line without being identically zero.
+
+The proof of Exercise \ref{ex:llps} survives untouched: item 4 asserts the existence, for each $k$,
+of \emph{some} $b_k$ with $\sigma^{(k)}(b_k)\ne0$, and here one may take any $b_k>0$. What would
+have broken is a version of item 5 insisting on $\lambda = b = 0$: that would require
+$\sigma^{(k)}(0)\ne0$, which fails here for every $k\ge3$. The moral: non-polynomiality is a
+\emph{global} property, and the proof must be allowed to look for a good point rather than being
+handed one.
+
+\textbf{2.} $K$ has two points, so $C(K)\cong\R^2$ via $f\mapsto(f(0),f(e_1))$, with the sup norm.
+With $\sigma(t) = t^2$: taking $w = 0$, $b=1$ gives the vector $(1,1)$; taking $w = e_1$, $b = 0$
+gives $(\sigma(0),\sigma(1)) = (0,1)$. These two vectors are independent, so
+$\Sigma_2(\sigma) = \R^2 = C(K)$: $\Sigma(\sigma)$ is not merely dense, it is \emph{everything}.
+
+There is no conflict with Exercise \ref{ex:poly}, item 2, whose conclusion was conditional on $K$
+having nonempty interior. The inclusion $\Sigma(\sigma)\subseteq\Pp_2(\R^d)$ still holds; what fails
+is that $\Pp_2(\R^d)$ is a proper subspace \emph{of $C(K)$}, because restriction to a two-point set
+is far from injective on polynomials. This is exactly the role of the interior hypothesis, and it is
+worth having seen it fail once.
+
+\textbf{3.} Two things break. First, $\{w\cdot x : x\in K\}$ is no longer contained in a compact
+interval, so the step-function approximation of item 8 of Exercise \ref{ex:discr} --- which relies on
+uniform approximation of a continuous function on a \emph{compact} interval --- is unavailable.
+Second, and more fundamentally, $C_b(\R^d)$ with the sup norm has a much larger dual than the space
+of finite measures, so (RM) in the form we used does not apply and the skeleton of Exercise
+\ref{ex:skeleton} collapses.
+
+The conclusion is in fact false in that setting for a simple reason: uniform approximation on all of
+$\R^d$ forces matching behaviour at infinity, and every element of $\Sigma(\sigma)$ for sigmoidal
+$\sigma$ has strong constraints there, whereas a general bounded continuous function has none. The
+right statement is the one we proved: density on \emph{every} compact, that is, uniform convergence
+on compacts.
+
+\textbf{4.} Let $\ell_\pm := \lim_{t\to\pm\infty}\sigma(t)$ be finite. There is $T>0$ such that
+$\abs{\sigma(t) - \ell_+}\le1$ for $t\ge T$ and $\abs{\sigma(t)-\ell_-}\le1$ for $t\le-T$, so
+$\abs\sigma\le\max(\abs{\ell_+},\abs{\ell_-})+1$ outside $[-T,T]$. On the compact $[-T,T]$ the
+continuous function $\sigma$ is bounded. Hence $\sigma$ is bounded on $\R$.
+
+Consequently, in the statement of Cybenko's theorem, ``bounded'' is redundant once $\sigma$ is
+assumed continuous and sigmoidal: it is implied. It is \emph{not} redundant in Exercise
+\ref{ex:discr}, where $\sigma$ is only assumed measurable.
+
+\textbf{5.} The division of labour is clean. Exercise \ref{ex:discr} is a measure-theoretic
+statement about the family $\{\sigma(w\cdot{\,\cdot\,}+b)\}$ tested against $\mu$; integration needs
+only measurability and boundedness. Exercise \ref{ex:skeleton} is a functional-analytic statement
+inside $C(K)$; it needs those functions to \emph{be} elements of $C(K)$, hence continuity.
+
+For $\sigma = \ind_{[0,\infty)}$: Exercise \ref{ex:discr} applies verbatim and $\sigma$ is
+discriminatory. But $\Sigma(\sigma)$ consists of step-like functions, which are not continuous, so
+$\Sigma(\sigma)\not\subseteq C(K)$ and the question ``is $\Sigma(\sigma)$ dense in $C(K)$?'' is not
+even well posed as stated. One can of course ask about density in $L^p(K)$ instead, and there the
+argument goes through with the corresponding duality --- which is how Cybenko's result is usually
+extended.
+
+% ================================================================
+\newpage
+\fi
+
+\section*{References}
+\addcontentsline{toc}{section}{References}
+
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+\item A.~Pinkus, \emph{Approximation theory of the MLP model in neural networks}, Acta Numerica
+\textbf{8} (1999), 143--195. --- \emph{The reference for this whole sheet; §\,3 contains the
+reduction from continuous to smooth $\sigma$ sketched in Exercise \ref{ex:llps}, item 9.}
+\item G.~Cybenko, \emph{Approximation by superpositions of a sigmoidal function}, Mathematics of
+Control, Signals and Systems \textbf{2} (1989), 303--314.
+\item M.~Leshno, V.~Y.~Lin, A.~Pinkus, S.~Schocken, \emph{Multilayer feedforward networks with a
+nonpolynomial activation function can approximate any function}, Neural Networks \textbf{6} (1993),
+861--867.
+\item R.~DeVore, B.~Hanin, G.~Petrova, \emph{Neural network approximation}, Acta Numerica
+\textbf{30} (2021), 327--444.
+\end{itemize}
+
+\end{document}

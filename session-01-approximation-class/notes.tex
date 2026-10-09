@@ -1,0 +1,1547 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{pinns-course}
+
+\coursemeta{Session 1 --- The neural network as an approximation class}{Session 1}{PINNs, PDEs, approximation theory, neural networks, M2 MACIA, AGM, CY Cergy Paris University}
+
+% ================================================================
+\begin{document}
+
+\coursetitle{Session 1}{The neural network\\[3pt] as an approximation class}{}
+
+\vspace{6pt}
+
+\begin{keybox}
+\textbf{Prerequisites.} Functional analysis (Hahn--Banach, Riesz representation), measure theory and
+integration, Fourier transform of finite measures, Sobolev spaces, elementary probability.
+\emph{No prior exposure to machine learning is assumed.}
+
+\smallskip
+The problem set (§\,7) is designed to be worked through independently; full solutions are in §\,8.
+\end{keybox}
+
+\bigskip
+
+\newpage
+\tableofcontents
+\newpage
+
+% ================================================================
+\section{The approximation class}
+
+\subsection{Definitions}
+
+Throughout, $d \ge 1$ is the spatial dimension and $\sigma : \R \to \R$ is a fixed function, called
+the \kw{activation function}. For a vector $y = (y_1,\dots,y_m) \in \R^m$ we write
+$\sigma(y) := (\sigma(y_1),\dots,\sigma(y_m))$ for the componentwise application of $\sigma$.
+
+\begin{definition}[Multilayer perceptron]\label{def:mlp}
+Let $L \ge 1$ and $N_0 = d,\, N_1,\dots,N_L \in \N^*$. A \kw{neural network} (or multilayer
+perceptron) with architecture $(N_0,\dots,N_L)$ and activation $\sigma$ is the function
+$\Phi_\theta : \R^d \to \R^{N_L}$ defined by
+\[
+\Phi_\theta = A_L \circ \sigma \circ A_{L-1} \circ \sigma \circ \cdots \circ \sigma \circ A_1,
+\qquad
+A_\ell(y) = W_\ell\, y + b_\ell,\quad W_\ell \in \R^{N_\ell \times N_{\ell-1}},\ b_\ell \in \R^{N_\ell}.
+\]
+The parameter is $\theta = (W_1,b_1,\dots,W_L,b_L) \in \R^{P}$ with
+$P = \sum_{\ell=1}^L (N_{\ell-1}N_\ell + N_\ell)$. The integer $L$ is the \kw{depth} (the number of
+affine layers; there are $L-1$ hidden layers), $\max_\ell N_\ell$ is the \kw{width}, and $P$ the
+number of parameters.
+\end{definition}
+
+\begin{center}
+\begin{tikzpicture}[
+  scale=0.95, transform shape,
+  neuron/.style={circle, draw=coursgrey, minimum size=15pt, inner sep=0pt},
+  inp/.style={neuron, fill=coursbg},
+  hid/.style={neuron, fill=coursteal!15, draw=coursteal},
+  outn/.style={neuron, fill=courswine!15, draw=courswine},
+  edg/.style={-, draw=coursgrey!45, line width=0.3pt}
+]
+\foreach \i in {1,2}   \node[inp] (I\i) at (0, 1.2-1.2*\i) {};
+\foreach \i in {1,...,4} \node[hid] (H\i) at (2.4, 2.4-1.0*\i) {};
+\foreach \i in {1,...,4} \node[hid] (G\i) at (4.8, 2.4-1.0*\i) {};
+\node[outn] (O1) at (7.2, -0.6) {};
+\foreach \i in {1,2} \foreach \j in {1,...,4} \draw[edg] (I\i) -- (H\j);
+\foreach \i in {1,...,4} \foreach \j in {1,...,4} \draw[edg] (H\i) -- (G\j);
+\foreach \i in {1,...,4} \draw[edg] (G\i) -- (O1);
+\node[below=2pt of I2, font=\scriptsize, text=coursgrey] {$x \in \R^2$};
+\node[below=2pt of H4, font=\scriptsize, text=coursgrey] {$\sigma(A_1 x)$};
+\node[below=2pt of G4, font=\scriptsize, text=coursgrey] {$\sigma(A_2 \cdot)$};
+\node[below=6pt of O1, font=\scriptsize, text=coursgrey] {$\Phi_\theta(x) \in \R$};
+\end{tikzpicture}
+\end{center}
+
+\begin{definition}[Network classes]
+Write $\Nn^\sigma_{L,W}(d)$ for the set of functions $\R^d \to \R$ realised by a network with
+activation $\sigma$, depth $\le L$ and width $\le W$, as $\theta$ ranges over $\R^P$. For $L = 2$
+(one hidden layer with $n$ neurons) we simply write
+\begin{equation}\label{eq:sigman}
+\Sigma_n(\sigma) := \Big\{ x \mapsto \sum_{i=1}^n c_i\, \sigma(w_i \cdot x + b_i)
+\ :\ c_i \in \R,\ w_i \in \R^d,\ b_i \in \R \Big\},
+\qquad
+\Sigma(\sigma) := \bigcup_{n \ge 1} \Sigma_n(\sigma).
+\end{equation}
+Thus $\Sigma(\sigma)$ is the linear span of the \kw{ridge functions}
+$x \mapsto \sigma(w\cdot x + b)$.
+\end{definition}
+
+\begin{remark}
+Beware of a source of confusion that pervades the literature: $\Sigma(\sigma)$, the union over $n$,
+\emph{is} a vector space, whereas $\Sigma_n(\sigma)$ for \emph{fixed} $n$ is not. Density theorems
+concern $\Sigma(\sigma)$; questions of cost, rate and optimisation concern $\Sigma_n(\sigma)$.
+The entire difficulty of the subject lives in that gap.
+\end{remark}
+
+\subsection{Elementary structure of the class}
+
+\begin{proposition}[Stable operations]\label{prop:stable}
+Let $\sigma$ be arbitrary, $f \in \Sigma_n(\sigma)$, $g \in \Sigma_m(\sigma)$ and $\lambda \in \R$.
+Then:
+\begin{enumerate}[label=(\roman*)]
+\item $\lambda f \in \Sigma_n(\sigma)$;
+\item $f + g \in \Sigma_{n+m}(\sigma)$;
+\item for every affine map $A$ from $\R^{d'}$ to $\R^d$, $f \circ A \in \Sigma_n(\sigma)$;
+\item if $\sigma \in C^k(\R)$, then every $\Phi_\theta \in \Nn^\sigma_{L,W}(d)$ is of class $C^k$
+and, for every multi-index $\alpha$ with $\abs{\alpha} \le k$, $\partial^\alpha \Phi_\theta$ is
+computed by composition and the chain rule.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(i) Replace $c_i$ by $\lambda c_i$. (ii) Concatenate the two sums. (iii) If $A(z) = Mz + p$ then
+$\sigma(w_i\cdot(Mz+p)+b_i) = \sigma((M^{\!\top}w_i)\cdot z + (w_i\cdot p + b_i))$.
+(iv) A finite composition of affine maps (which are $C^\infty$) and of $\sigma$ applied
+componentwise.
+\end{proof}
+
+Item (ii) shows that $\Sigma_n$ is not stable under addition: already a hint that the class lacks
+linear structure. The next result makes this precise.
+
+\begin{proposition}[The class is not convex]\label{prop:nonconvex}
+Let $d \ge 2$ and let $\sigma \in C^1(\R)$ satisfy $\sigma' > 0$ everywhere with $\sigma'$
+nonconstant (for instance $\sigma = \tanh$, for which $\sigma' = \sech^2 > 0$). Then
+$\Sigma_1(\sigma)$ is not convex.
+\end{proposition}
+
+\begin{proof}
+Let $w_1, w_2 \in \R^d$ be linearly independent, and set
+\[
+f_1(x) = \sigma(w_1\cdot x), \qquad f_2(x) = \sigma(w_2 \cdot x), \qquad
+f := \tfrac12 (f_1 + f_2).
+\]
+Then $f_1, f_2 \in \Sigma_1(\sigma)$. Suppose, for contradiction, that $f \in \Sigma_1(\sigma)$,
+that is, $f(x) = c\,\sigma(w\cdot x + b)$ for some $c \in \R$, $w \in \R^d$, $b \in \R$.
+
+First, $f$ is not constant: $\nabla f(0) = \tfrac12 \sigma'(0)(w_1 + w_2) \ne 0$, since
+$\sigma'(0) > 0$ and $w_1 + w_2 \ne 0$ by linear independence. Hence $c \ne 0$ and $w \ne 0$.
+
+For every $x$, $\nabla f(x) = c\,\sigma'(w\cdot x + b)\, w$, and $\sigma' > 0$ gives
+$\nabla f(x) \in \R^*\, w$: \emph{all gradients of $f$ are collinear}. This is the characteristic
+property of a ridge function: $f$ is constant on each hyperplane $\{w\cdot x = \text{const}\}$.
+
+On the other hand, computing directly,
+$\nabla f(x) = \tfrac12\big( \sigma'(w_1\cdot x)\, w_1 + \sigma'(w_2 \cdot x)\, w_2 \big)$.
+By linear independence of $w_1, w_2$ there exists $x_1 \in \R^d$ with $w_1 \cdot x_1 = 0$ and
+$w_2 \cdot x_1 = t$, where $t \in \R$ is chosen so that $\sigma'(t) \ne \sigma'(0)$ (possible since
+$\sigma'$ is nonconstant). Then, in the basis $(w_1,w_2)$ of the plane they span,
+\[
+\nabla f(0) = \tfrac12 \sigma'(0)\,\big(w_1 + w_2\big),
+\qquad
+\nabla f(x_1) = \tfrac12 \big( \sigma'(0)\, w_1 + \sigma'(t)\, w_2\big).
+\]
+These two vectors are collinear if and only if
+$\sigma'(0)\sigma'(t) - \sigma'(0)\sigma'(0) = 0$, that is, $\sigma'(t) = \sigma'(0)$: a
+contradiction. Hence $f \notin \Sigma_1(\sigma)$, and $\Sigma_1(\sigma)$ is not convex.
+\end{proof}
+
+\begin{remark}[What is lost]\label{rem:cealost}
+This seemingly innocuous proposition has far-reaching consequences. The whole Galerkin method rests
+on the fact that the approximation space $V_h$ is a \emph{linear subspace}: that is what lets one
+write the Euler--Lagrange equation as a linear system, invoke Céa's lemma
+\[
+\norm{u - u_h}_{V} \le \frac{M}{\alpha}\, \inf_{v_h \in V_h} \norm{u - v_h}_V ,
+\]
+and reduce error analysis to a pure approximation question. With networks none of this is available. For nonlinear fixed-size classes, such as
+$\Sigma_1(\sigma)$, convexity is generally lost --- the degenerate case $L = 1$, where the
+realisations are the affine maps and the class \emph{is} convex, is the exception that shows the
+statement has to be qualified. The functional to be minimised is in general not convex in $\theta$
+either (Exercise \ref{ex:structure}, item 4, gives a rigorous example; nonconvexity of the class
+does not by itself force nonconvexity of the loss), and the minimiser may be neither unique nor
+attained. This is the thread running through the course; we
+shall meet it again in Session 5 (where PDE stability replaces Céa) and in Session 6 (where the gap
+between ``a good $\theta$ exists'' and ``the optimiser finds it'' is quantified).
+\end{remark}
+
+\begin{remark}[Failure of closedness]\label{rem:nonclosed}
+The class also fails to be closed, and this is a theorem rather than a heuristic. Fix an
+architecture with $L \ge 2$ layers and at least two units in the last hidden layer. If $\sigma$ is
+real analytic with bounded derivatives --- which covers $\tanh$, the logistic sigmoid and
+$\arctan$ --- the set of realisations is \emph{not closed} in $W^{k,p}((0,1)^d)$ for any $k \in \N$
+and any $p \in [1,\infty]$ (Mahan, King and Cloninger, 2021, Thm.\ 3.3). For $\ReLU$ the
+corresponding non-closedness statement holds in $L^p$ for $1 \le p < \infty$ only: $\ReLU$ is
+precisely an exception in the $L^\infty$ result of Petersen, Raslan and Voigtlaender (2021), which
+is the reference for the general topological picture. The endpoint $p = \infty$ is therefore not a
+detail one may quietly absorb into the quantifier.
+
+The mechanism is the one one would guess: the difference quotients
+$\lambda\big(\sigma(w\cdot x + b + 1/\lambda) - \sigma(w \cdot x + b)\big) \in \Sigma_2(\sigma)$
+converge, as $\lambda \to \infty$, to $\sigma'(w\cdot x + b)$. The work in the references above is
+in proving that this limit is genuinely not a realisation --- exhibiting a convergent sequence is
+the easy half. Practical consequence: $\min_{\theta} J(\theta)$ may have \emph{no} solution, the
+infimum being approached along diverging parameters. Weights running off to infinity are indeed
+observed when training PINNs, though observing them does not by itself prove that one is in this
+situation.
+\end{remark}
+
+\subsection{Regularity: a constraint the PDE imposes on the activation}
+
+The standard activations are
+\[
+\ReLU(t) = \max(t,0), \qquad
+\tanh(t) = \frac{\ee^t - \ee^{-t}}{\ee^t+\ee^{-t}}, \qquad
+\mathrm{sig}(t) = \frac{1}{1+\ee^{-t}}, \qquad
+\sin(t), \qquad
+\mathrm{GELU}(t) = t\,\Phi_{\!\Nn}(t),
+\]
+where $\Phi_{\!\Nn}$ is the standard normal distribution function. Only the first fails to be
+$C^\infty$.
+
+\begin{proposition}[ReLU networks]\label{prop:relu}
+Every function $\Phi_\theta \in \Nn^{\ReLU}_{L,W}(d)$ is continuous and piecewise affine (that is,
+there is a finite partition of $\R^d$ into convex polyhedra on each of which $\Phi_\theta$ is
+affine). In particular $\Phi_\theta \in W^{1,\infty}_{\mathrm{loc}}(\R^d)$ but in general
+$\Phi_\theta \notin C^1$, and its distributional second derivatives are measures carried by
+hyperplanes.
+\end{proposition}
+
+\begin{proof}
+Being continuous and piecewise affine is preserved under composition with an affine map and under
+$\ReLU$ (which cuts each polyhedron in two); induct on $L$. For the second assertion it suffices to
+treat $d = 1$ and $\Phi = \ReLU$. For $\varphi \in C^\infty_c(\R)$,
+\[
+\scal{\Phi''}{\varphi} = \scal{\Phi}{\varphi''} = \int_0^{+\infty} x\, \varphi''(x)\,\dd x
+= \big[ x\varphi'(x)\big]_0^{+\infty} - \int_0^{+\infty}\varphi'(x)\,\dd x
+= 0 - \big(0 - \varphi(0)\big) = \varphi(0),
+\]
+so that $\ReLU'' = \delta_0$ in the sense of distributions.
+\end{proof}
+
+\begin{keybox}
+\textbf{Immediate consequence for PINNs.} Consider the Poisson problem $-\Delta u = f$ and the
+strong residual $\Rr(v) = -\Delta v - f$. With a ReLU activation $\Delta \Phi_\theta$ is a singular
+measure, so $\Rr(\Phi_\theta)$ is not a function and its pointwise value at a collocation point is
+not defined by the PDE.
+
+\smallskip
+It is worth being precise about what then happens in code, because the situation is subtler --- and
+worse --- than ``the loss is meaningless''. An automatic-differentiation library does not return the
+distributional derivative; it returns the classical one, which exists and equals $0$ at every point
+off the finite breakpoint set. At generic collocation points the interior loss is therefore
+perfectly well defined numerically, and equal to $\frac1N\sum_i \abs{f(x_i)}^2$:
+\emph{a constant, with identically zero gradient in $\theta$}. Nothing crashes; the residual term
+simply carries no information about $\theta$ at all. A silent failure is harder to notice than an
+error message.
+
+\smallskip
+\textbf{Rule of thumb, stated carefully.} $\sigma \in C^m$ is a clean \emph{sufficient} condition
+for the strong residual of an order-$m$ PDE to be defined pointwise everywhere in the classical
+sense --- which is why $\tanh$ is used systematically in the PINN literature. It is not necessary in
+any absolute sense: a weak formulation changes the requirement entirely. In Session 7 we shall see
+that the Deep Ritz functional needs only $\Phi_\theta \in H^1$, for which a locally Lipschitz
+activation on a bounded domain suffices --- $\ReLU$ qualifies, a merely continuous activation does
+not. VPINNs, which integrate by parts against test functions, impose a different requirement again,
+and should not be lumped together with Deep Ritz.
+\end{keybox}
+
+% ================================================================
+\section{Universal approximation}
+
+The question in this section is purely qualitative: \emph{can any continuous function be
+approximated by a network, if we allow ourselves as many neurons as we wish?}
+
+\subsection{Cybenko's theorem}
+
+\begin{definition}
+A bounded measurable function $\sigma : \R \to \R$ is \kw{sigmoidal} if
+\[
+\lim_{t \to +\infty} \sigma(t) = 1, \qquad \lim_{t \to -\infty} \sigma(t) = 0 .
+\]
+Given a compact set $K \subset \R^d$, it is \kw{discriminatory on $K$} if, for every finite
+signed regular Borel measure $\mu$ on $K$,
+\[
+\Big( \forall w \in \R^d,\ \forall b \in \R : \int_K \sigma(w\cdot x + b)\, \dd\mu(x) = 0 \Big)
+\ \Longrightarrow \ \mu = 0 .
+\]
+\end{definition}
+
+\begin{lemma}[Every bounded sigmoidal function is discriminatory]\label{lem:discr}
+Let $\sigma$ be bounded, measurable and sigmoidal, and let $K \subset \R^d$ be compact. Then
+$\sigma$ is discriminatory on $K$.
+\end{lemma}
+
+\begin{proof}
+Let $\mu$ be a finite signed Borel measure on $K$ such that
+$\int_K \sigma(w\cdot x + b)\,\dd\mu(x) = 0$ for all $w, b$.
+
+\smallskip
+\noindent\emph{Step 1: $\mu$ annihilates every half-space and every hyperplane.}
+Fix $w \in \R^d$, $b \in \R$, $\varphi \in \R$, and for $\lambda > 0$ set
+\[
+\sigma_\lambda(x) := \sigma\big(\lambda(w\cdot x + b) + \varphi\big).
+\]
+By hypothesis $\int_K \sigma_\lambda \,\dd\mu = 0$ for every $\lambda > 0$ (apply the hypothesis
+with $\lambda w$ and $\lambda b + \varphi$). As $\lambda \to +\infty$,
+\[
+\sigma_\lambda(x) \longrightarrow
+\begin{cases}
+1 & \text{if } w\cdot x + b > 0,\\
+0 & \text{if } w\cdot x + b < 0,\\
+\sigma(\varphi) & \text{if } w\cdot x + b = 0.
+\end{cases}
+\]
+The family $(\sigma_\lambda)$ is uniformly bounded by $\norm{\sigma}_\infty$ and
+$\abs{\mu}(K) < \infty$; dominated convergence therefore gives, writing
+$H^+_{w,b} = \{x \in K : w\cdot x + b > 0\}$ and $\Pi_{w,b} = \{x \in K : w\cdot x + b = 0\}$,
+\begin{equation}\label{eq:cyb1}
+\mu\big(H^+_{w,b}\big) + \sigma(\varphi)\, \mu\big(\Pi_{w,b}\big) = 0
+\qquad \text{for every } \varphi \in \R .
+\end{equation}
+Letting $\varphi \to -\infty$ in \eqref{eq:cyb1} (so $\sigma(\varphi) \to 0$) yields
+$\mu(H^+_{w,b}) = 0$; letting $\varphi \to +\infty$ yields
+$\mu(H^+_{w,b}) + \mu(\Pi_{w,b}) = 0$, whence $\mu(\Pi_{w,b}) = 0$. This holds for all $w, b$.
+
+\smallskip
+\noindent\emph{Step 2: the Fourier transform of $\mu$ vanishes.}
+Fix $w \in \R^d$. Since $K$ is compact, the image of $K$ under $x \mapsto w\cdot x$ is
+\emph{contained in} the compact interval $[\alpha,\beta]$, where
+$\alpha := \min_{x \in K} w\cdot x$ and $\beta := \max_{x \in K} w\cdot x$. (It need not \emph{be}
+that interval: $K$ may be disconnected.) For bounded measurable $h : [\alpha,\beta] \to \R$ define
+\[
+F(h) := \int_K h(w\cdot x)\, \dd \mu(x) .
+\]
+$F$ is linear with $\abs{F(h)} \le \norm{h}_\infty\, \abs{\mu}(K)$. By Step 1, for every $s \in \R$,
+\[
+F\big(\ind_{(s,+\infty)}\big) = \mu\big(H^+_{w,-s}\big) = 0,
+\qquad
+F\big(\ind_{[s,+\infty)}\big) = \mu\big(H^+_{w,-s}\big) + \mu\big(\Pi_{w,-s}\big) = 0 .
+\]
+By subtraction and linearity, $F$ vanishes on the indicator of every interval, hence on every step
+function. Every continuous function on the segment $[\alpha,\beta]$ is a uniform limit of step
+functions, and $F$ is continuous for $\norm{\cdot}_\infty$; therefore $F(h) = 0$ for every
+$h \in C([\alpha,\beta])$.
+
+Applying this to $h = \cos$ and $h = \sin$:
+\[
+\widehat{\mu}(w) := \int_K \ee^{\,\ii\, w \cdot x}\, \dd\mu(x)
+= \int_K \cos(w\cdot x)\dd\mu(x) + \ii \int_K \sin(w\cdot x)\dd\mu(x) = 0
+\qquad \text{for every } w \in \R^d .
+\]
+The Fourier--Stieltjes transform of a finite signed measure determines that measure; hence
+$\mu = 0$.
+\end{proof}
+
+\begin{theorem}[Cybenko, 1989]\label{th:cybenko}
+Let $\sigma \in C(\R)$ be bounded and sigmoidal, and let $K \subset \R^d$ be compact. Then
+$\Sigma(\sigma)$ is dense in $\big(C(K), \norm{\cdot}_\infty\big)$: for every $f \in C(K)$ and every
+$\varepsilon > 0$ there exist $n \in \N^*$ and $(c_i, w_i, b_i)_{1 \le i \le n}$ such that
+\[
+\sup_{x \in K}\ \Big| f(x) - \sum_{i=1}^n c_i \,\sigma(w_i \cdot x + b_i)\Big| < \varepsilon .
+\]
+\end{theorem}
+
+\begin{proof}
+$S := \Sigma(\sigma)$ is a linear subspace of $C(K)$. Suppose, for contradiction, that its closure
+$\overline{S}$ is a \emph{proper} closed subspace of $C(K)$.
+
+By the Hahn--Banach theorem (geometric form, or the separation corollary) there is a continuous
+linear functional $L \in C(K)'$, $L \ne 0$, with $L|_{\overline{S}} = 0$.
+
+By the Riesz--Markov representation theorem there is a finite signed regular Borel measure $\mu$ on
+$K$ such that
+\[
+L(f) = \int_K f \,\dd \mu \qquad \text{for every } f \in C(K),
+\qquad \text{with } \norm{L}_{C(K)'} = \abs{\mu}(K) .
+\]
+Since $L \ne 0$, we have $\mu \ne 0$.
+
+But for all $w \in \R^d$ and $b \in \R$ the function $x \mapsto \sigma(w\cdot x + b)$ belongs to
+$S$, hence
+\[
+\int_K \sigma(w\cdot x + b)\,\dd\mu(x) = L\big(\sigma(w\cdot\, \cdot + b)\big) = 0 .
+\]
+Lemma \ref{lem:discr} then gives $\mu = 0$: a contradiction. Therefore $\overline{S} = C(K)$.
+\end{proof}
+
+\begin{remark}[A step not to skip]
+No reduction to a cube is needed above, because Lemma \ref{lem:discr} was stated for an arbitrary
+compact $K$ and its proof uses only compactness. Had we stated the lemma on $[0,1]^d$ alone --- as
+Cybenko does --- the passage to a general compact $K \subset [0,1]^d$ would require extending $\mu$
+from $K$ to the cube by zero. That extension is harmless, but it is a step, and it is routinely
+omitted in secondary accounts.
+\end{remark}
+
+\begin{remark}[What the theorem does not say]\label{rem:cybenko-limits}
+Three warnings, worth repeating to students:
+\begin{enumerate}[label=(\alph*)]
+\item The proof is \emph{nonconstructive}: it argues by contradiction via Hahn--Banach. It produces
+no network and no algorithm.
+\item It provides \emph{no rate}: nothing is said about how many neurons are needed to reach
+$\varepsilon$. That is the subject of §\,3.
+\item It says nothing about whether such $(c_i,w_i,b_i)$ can be \emph{found} by an optimisation
+method. That is the subject of Session 6, and it is precisely where the real gap between the theory
+and the practice of PINNs lies.
+\end{enumerate}
+\end{remark}
+
+\subsection{The complete characterisation: the Leshno--Lin--Pinkus--Schocken theorem}
+
+Cybenko's theorem assumes $\sigma$ sigmoidal, which excludes $\ReLU$ (unbounded). The optimal
+characterisation is due to Leshno, Lin, Pinkus and Schocken.
+
+\begin{theorem}[LLPS, 1993]\label{th:llps}
+Let $\sigma \in C(\R)$. Then $\Sigma(\sigma)$ is dense in $C(K)$ for every compact
+$K \subset \R^d$ and every $d \ge 1$ \emph{if and only if} $\sigma$ is not a polynomial.
+\end{theorem}
+
+We prove the necessary condition in full, and then the sufficient condition in the case
+$\sigma \in C^\infty$ --- the general $C^0$ case reduces to it by mollification, see Pinkus (1999,
+§\,3).
+
+\begin{proposition}[Necessity]\label{prop:poly}
+If $\sigma$ is a polynomial of degree $m$, then $\Sigma(\sigma)$ is dense in $C(K)$ for no compact
+set $K$ with nonempty interior.
+\end{proposition}
+
+\begin{proof}
+If $\sigma(t) = \sum_{j=0}^m a_j t^j$, then for all $w,b$ the function
+$x \mapsto \sigma(w\cdot x + b) = \sum_j a_j (w\cdot x + b)^j$ is a polynomial in $x$ of total
+degree $\le m$. Hence $\Sigma(\sigma) \subseteq \Pp_m(\R^d)$, the space of polynomials of total
+degree $\le m$. But $\Pp_m(\R^d)$ is finite-dimensional, hence closed in $C(K)$. Therefore
+$\overline{\Sigma(\sigma)} \subseteq \Pp_m(\R^d)$, which is a proper subspace of $C(K)$ as soon as
+$K$ has nonempty interior (the function $x \mapsto \abs{x_1 - x_1^0}$, for $x^0$ interior, is not
+polynomial near $x^0$). Hence $\Sigma(\sigma)$ is not dense.
+\end{proof}
+
+\begin{proposition}[Sufficiency, smooth case]\label{prop:llps-smooth}
+Let $\sigma \in C^\infty(\R)$ be nonpolynomial. Then $\Sigma(\sigma)$ is dense in $C(K)$ for every
+compact $K \subset \R^d$.
+\end{proposition}
+
+\begin{proof}
+\emph{Step 1: ridge monomials lie in the closure.}
+Write $V := \overline{\Sigma(\sigma)}$ (closure in $C(K)$), a closed linear subspace. Fix
+$w \in \R^d$ and $b \in \R$. For $\lambda \in \R$ and $h \ne 0$,
+\[
+x \longmapsto \frac{\sigma\big((\lambda + h)\, w\cdot x + b\big) - \sigma\big(\lambda\, w \cdot x + b\big)}{h}
+\ \in\ \Sigma_2(\sigma) \subseteq V .
+\]
+As $h \to 0$, this expression converges \emph{uniformly on $K$} (since $w\cdot x$ is bounded on $K$
+and $\sigma'$ is uniformly continuous on compact sets) to
+$x \mapsto (w\cdot x)\, \sigma'(\lambda\, w\cdot x + b)$. Since $V$ is closed, this function lies in
+$V$.
+
+Iterating the same argument $k$ times (differentiating in $\lambda$, which is legitimate throughout
+by uniform convergence on the compact set $K$) gives
+\[
+x \longmapsto (w\cdot x)^k\, \sigma^{(k)}\big(\lambda\, w\cdot x + b\big) \ \in\ V
+\qquad \text{for all } k \in \N,\ \lambda \in \R,\ b \in \R .
+\]
+Taking $\lambda = 0$: $x \mapsto \sigma^{(k)}(b)\, (w\cdot x)^k \in V$.
+
+Since $\sigma$ is nonpolynomial and $\sigma \in C^\infty$, for every $k$ there is $b_k \in \R$ with
+$\sigma^{(k)}(b_k) \ne 0$ --- otherwise $\sigma^{(k)} \equiv 0$ for some $k$ and $\sigma$ would be
+polynomial. Hence
+\[
+x \longmapsto (w\cdot x)^k \ \in\ V \qquad \text{for all } k \in \N,\ w \in \R^d .
+\]
+
+\smallskip
+\noindent\emph{Step 2: ridge monomials span all polynomials.}
+Fix $k$ and $i_1,\dots,i_k \in \{1,\dots,d\}$. The polarisation identity
+\[
+k!\, y_1 y_2 \cdots y_k \;=\; \sum_{S \subseteq \{1,\dots,k\}} (-1)^{k - \abs{S}}
+\Big( \sum_{j \in S} y_j \Big)^{k}
+\]
+(valid in any commutative ring; expand by the multinomial formula and observe that only the terms
+containing each $y_j$ exactly once survive) applied to $y_j = x_{i_j}$ gives
+\[
+k!\; x_{i_1}\cdots x_{i_k} \;=\; \sum_{S} (-1)^{k-\abs{S}} \big( w_S \cdot x \big)^k,
+\qquad w_S := \sum_{j \in S} e_{i_j}.
+\]
+Each term on the right lies in $V$ by Step 1, hence $x_{i_1}\cdots x_{i_k} \in V$. By linearity $V$
+contains every monomial, hence every polynomial.
+
+\smallskip
+\noindent\emph{Step 3: conclusion.}
+$\Pp(\R^d)$ is a subalgebra of $C(K)$ containing the constants and separating points; by the
+Stone--Weierstrass theorem it is dense in $C(K)$. Since $\Pp(\R^d) \subseteq V$ and $V$ is closed,
+$V = C(K)$.
+\end{proof}
+
+\begin{remark}
+Proposition \ref{prop:llps-smooth} is also the key to a useful exercise (Exercise \ref{ex:poly}):
+it shows that the real obstruction to universality is not the shape of $\sigma$ but its
+\emph{degree of nonpolynomiality}. A network with activation $\sigma(t) = t^2$ and depth $L$ spans
+only polynomials of degree $\le 2^{L-1}$: depth raises the degree, but one stays inside a
+polynomial class.
+\end{remark}
+
+% ================================================================
+\section{Quantitative bounds: the Barron class}
+
+Cybenko's theorem gives no rate. The quantitative question is: how many neurons are needed to reach
+accuracy $\varepsilon$? For a \emph{linear} approximation method (finite elements, polynomials,
+wavelets) on a ball of $W^{s,\infty}([0,1]^d)$, the answer is given by the Kolmogorov $n$-widths:
+\begin{equation}\label{eq:kolm}
+d_n\big( B_{W^{s,\infty}}, L^\infty \big) \;\asymp\; n^{-s/d},
+\end{equation}
+that is, $n \asymp \varepsilon^{-d/s}$: the \kw{curse of dimensionality}. The next result shows
+that a well-chosen class of functions escapes this bound \emph{with networks}, at the price of a
+strong structural hypothesis.
+
+\subsection{Maurey's lemma}
+
+This is a purely Hilbertian result, independent of networks, and remarkably simple.
+
+\begin{lemma}[Maurey; Pisier; Jones; Barron]\label{lem:maurey}
+Let $\Hh$ be a Hilbert space and $G \subseteq \Hh$ with
+$\displaystyle\sup_{g \in G} \norm{g}_\Hh \le \beta < \infty$. Let $f \in \co(G)$, the convex hull
+of $G$. Then for every $n \ge 1$ there exist $g_1,\dots,g_n \in G$ such that
+\[
+\Big\| f - \frac1n \sum_{i=1}^n g_i \Big\|_{\Hh}^2 \;\le\; \frac{\beta^2 - \norm{f}_\Hh^2}{n} .
+\]
+If $f \in \overline{\co}(G)$, then for every $\varepsilon > 0$ there exist $g_1,\dots,g_n \in G$
+with $\norm{f - \frac1n\sum_i g_i}_\Hh \le \beta/\sqrt{n} + \varepsilon$.
+\end{lemma}
+
+\begin{proof}
+Write $f = \sum_{j=1}^m \lambda_j h_j$ with $h_j \in G$, $\lambda_j \ge 0$, $\sum_j \lambda_j = 1$.
+Let $G_1, \dots, G_n$ be independent identically distributed random variables with values in
+$\{h_1,\dots,h_m\}$ and $\Prob(G_i = h_j) = \lambda_j$. Then $\E[G_i] = f$ (a Bochner expectation,
+here a finite sum).
+
+Set $S_n = \frac1n \sum_{i=1}^n G_i$. The variables $G_i - f$ are independent, centred and
+$\Hh$-valued, so the cross terms vanish:
+\[
+\E \norm{f - S_n}^2
+= \frac{1}{n^2}\, \E\Big\| \sum_{i=1}^n (G_i - f) \Big\|^2
+= \frac{1}{n^2} \sum_{i=1}^n \E\norm{G_i - f}^2
+= \frac{1}{n}\, \E\norm{G_1 - f}^2 .
+\]
+Moreover $\E\norm{G_1 - f}^2 = \E\norm{G_1}^2 - 2\scal{\E G_1}{f} + \norm{f}^2
+= \E\norm{G_1}^2 - \norm{f}^2 \le \beta^2 - \norm{f}^2$. Hence
+$\E\norm{f - S_n}^2 \le (\beta^2 - \norm{f}^2)/n$.
+
+A random variable is at most its expectation with positive probability: there is therefore a
+realisation $(g_1,\dots,g_n)$ for which
+$\norm{f - \frac1n\sum_i g_i}^2 \le (\beta^2 - \norm f^2)/n$.
+
+For $f \in \overline{\co}(G)$, choose $\tilde f \in \co(G)$ with
+$\norm{f - \tilde f} \le \varepsilon$, apply the above to $\tilde f$, and use the triangle
+inequality.
+\end{proof}
+
+\begin{remark}
+The rate $n^{-1/2}$ is \emph{independent of the dimension}: this is the whole novelty. It is not, in
+fact, a phenomenon specific to neural networks but a general property of \emph{nonlinear} $n$-term
+approximation in a Hilbert space. The price to pay is that the membership $f \in \overline{\co}(G)$
+is a strong hypothesis: it is exactly what defines the Barron class.
+\end{remark}
+
+\subsection{The Barron class}
+
+\begin{definition}[Barron spectral seminorm]\label{def:barron}
+Let $r > 0$ and $B_r = \{x \in \R^d : \abs{x} \le r\}$. For $f : B_r \to \R$ set
+\[
+C_f := \inf \Big\{ \int_{\R^d} \abs{\xi}\,\dd\abs{\nu}(\xi) \Big\},
+\]
+the infimum being over all finite complex Borel measures $\nu$ on $\R^d$ such that
+\[
+f(x) = \int_{\R^d} \ee^{\,\ii\, \xi\cdot x}\, \dd\nu(\xi)
+\qquad \text{for every } x \in B_r ,
+\]
+with $C_f := +\infty$ if no such $\nu$ exists. Write $\Gamma_C := \{ f : C_f \le C\}$ for the
+\kw{Barron class} with constant $C$.
+\end{definition}
+
+\begin{remark}[Three points of hygiene]\label{rem:barron-hygiene}
+\emph{(a) Measures, not densities.} Requiring $\dd\nu = \tilde f\,\dd\xi$ with
+$\tilde f \in L^1$ would be a real restriction, not a harmless convenience: a pure frequency such
+as $x \mapsto \sin(K x_1)$ has no $L^1$ Fourier density, and mollifying an atom destroys the
+\emph{exact} identity on $B_r$ that the definition demands. With measures, $\nu$ may have atoms and
+the examples below are legitimate as they stand. This is also how Barron states it.
+
+\emph{(b) It is a seminorm.} Every constant function has $C_f = 0$: take $\nu = c\,\delta_0$, for
+which $\int\abs\xi\,\dd\abs\nu = 0$. This is exactly why $f(0)$ is subtracted in
+Theorem \ref{th:barron}: the constant part of $f$ is invisible to $C_f$ and must be supplied
+separately.
+
+\emph{(c) Exhibiting a representation gives only an upper bound.} Since the identity is required
+only on $B_r$, a particular $\nu$ yields $C_f \le \int\abs\xi\,\dd\abs\nu$ and nothing more: a
+cheaper representation agreeing with $f$ on $B_r$ and differing elsewhere may well exist. Any
+estimate obtained solely by exhibiting a representing measure is therefore an upper bound, unless a
+matching lower bound is proved --- as it is in Proposition \ref{prop:barron-elem}\,(iv), where
+part (ii) supplies it. Upper bounds are in any case all Theorem \ref{th:barron} needs, since the
+bound it proves is increasing in $C_f$. For the same reason the infimum need not be attained, and
+the proof below carries an $\eta > 0$ throughout.
+\end{remark}
+
+\begin{proposition}[Elementary properties]\label{prop:barron-elem}
+\begin{enumerate}[label=(\roman*)]
+\item $\Gamma_C$ is convex and symmetric, and $C_{\lambda f} = \abs{\lambda} C_f$.
+\item If $C_f < \infty$ then $f$ is Lipschitz on $B_r$ with constant $\le C_f$.
+\item For $f(x) = \ee^{-\abs{x}^2/2}$ on $\R^d$,
+$C_f \le \E\abs{Z} = \sqrt2\,\Gamma\!\big(\tfrac{d+1}{2}\big)/\Gamma\!\big(\tfrac d2\big) \sim \sqrt d$,
+where $Z \sim \Nn(0,I_d)$.
+\item For $f_K(x) = \sin(K x_1)$ one has $C_{f_K} = K$ --- the one entry in this list where the
+seminorm can be computed exactly, the lower bound coming from (ii). So the seminorm does grow
+linearly with frequency, and this is proved, not merely bounded above.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(i) Immediate from the definition. (ii) For any representing measure $\nu$ and any $x,y \in B_r$, using
+$\abs{\ee^{\ii a} - \ee^{\ii b}} \le \abs{a-b}$,
+\[
+\abs{f(x)-f(y)} = \Big|\int \big(\ee^{\ii \xi\cdot x} - \ee^{\ii \xi\cdot y}\big)\dd\nu(\xi)\Big|
+\le \int \abs{\xi\cdot(x-y)}\,\dd\abs{\nu}(\xi)
+\le \abs{x-y} \int\abs{\xi}\dd\abs{\nu}(\xi) ;
+\]
+taking the infimum over $\nu$ gives the Lipschitz constant $C_f$.
+(iii) Take $\dd\nu(\xi) = (2\pi)^{-d/2}\ee^{-\abs{\xi}^2/2}\dd\xi$, which represents $f$ on all
+of $\R^d$ since
+$\int_{\R^d} \ee^{\ii \xi x}(2\pi)^{-d/2}\ee^{-\abs\xi^2/2}\dd\xi = \ee^{-\abs x^2/2}$. Then
+\[
+C_f \le \int \abs\xi\, (2\pi)^{-d/2} \ee^{-\abs\xi^2/2}\,\dd\xi = \E\abs{Z},
+\]
+and the formula for $\E\abs Z$ is that of the $\chi$ distribution with $d$ degrees of freedom; the
+equivalent $\sqrt d$ follows from Stirling's formula.
+(iv) For the upper bound, take $\nu = \frac{1}{2\ii}\big(\delta_{Ke_1} - \delta_{-Ke_1}\big)$, a
+finite complex measure with
+$\int \ee^{\ii\xi\cdot x}\dd\nu(\xi) = \frac{1}{2\ii}\big(\ee^{\ii Kx_1} - \ee^{-\ii Kx_1}\big)
+= \sin(Kx_1)$. Its total variation is
+$\abs\nu = \tfrac12\big(\delta_{Ke_1} + \delta_{-Ke_1}\big)$, so
+$C_{f_K} \le \int\abs\xi\dd\abs\nu = \tfrac12 K + \tfrac12 K = K$.
+
+For the lower bound, apply (ii): $C_{f_K}$ dominates the Lipschitz constant of $f_K$ on $B_r$, and
+$\nabla f_K(x) = K\cos(Kx_1)\,e_1$, so $\abs{\nabla f_K(0)} = K$ and the Lipschitz constant is at
+least $K$. Hence $C_{f_K} \ge K$, and therefore $C_{f_K} = K$.
+\end{proof}
+
+\begin{remark}[Finite seminorm does impose regularity]\label{rem:barron-c1}
+It is tempting to read (iv) as saying that the Barron class ignores regularity altogether. It does
+not. If $\int\abs\xi\dd\abs\nu < \infty$ then one may differentiate under the integral sign,
+\[
+\partial_j f(x) = \int_{\R^d} \ii\, \xi_j\, \ee^{\ii \xi\cdot x}\, \dd\nu(\xi),
+\]
+the domination being by $\abs{\xi} \in L^1(\abs\nu)$; the same domination makes each $\partial_j f$
+continuous. So a function of finite spectral Barron seminorm admits a $C^1$ extension to $\R^d$. The
+correct statement is therefore not that the class is indifferent to smoothness, but that it is not
+\emph{graded} by classical smoothness order: an analytic function can have a large seminorm, and a
+finite seminorm already forces $C^1$.
+\end{remark}
+
+\begin{remark}\label{rem:barron-freq}
+Item (iv) is worth remembering for Session 6: in the bounds of this section, and again in the
+analysis of training, it is the \emph{frequency} content of the solution rather than its smoothness
+that drives the estimate. Stated carefully: a high frequency makes the Barron bound expensive --- an
+upper bound, so this is not a lower bound on the number of neurons --- and is separately associated
+with slower training in the regimes where that can be analysed. A spectral method may handle the
+same function comfortably, but only if its basis is adapted to it; a high frequency still demands
+adequate resolution there too.
+\end{remark}
+
+\subsection{Barron's theorem}
+
+\begin{theorem}[Barron, 1993]\label{th:barron}
+Let $\sigma$ be sigmoidal with $0 \le \sigma \le 1$, let $r > 0$, and let $\mu$ be a probability
+measure on $B_r$. Let $f : B_r \to \R$ with $C_f < \infty$. Then, for every $n \ge 1$ and every
+$\varepsilon > 0$, there exist $c_1,\dots,c_n \in \R$, $w_i \in \R^d$, $b_i \in \R$ with
+$\sum_{i=1}^n \abs{c_i} \le 2 r\, C_f + \varepsilon$, such that
+\[
+\Big\| f - f(0) - \sum_{i=1}^n c_i\, \sigma(w_i\cdot x + b_i) \Big\|_{L^2(\mu)}
+\;\le\; \frac{2\, r\, C_f}{\sqrt n} \;+\; \varepsilon .
+\]
+\end{theorem}
+
+The proof has two stages: first one shows that $f - f(0)$ lies in the closed convex hull of a family
+of uniformly bounded \emph{ridge sinusoids}, then that each of these sinusoids itself lies in the
+closed convex hull of the sigmoidal units. Maurey's lemma concludes.
+
+\begin{lemma}[Stage A: a mixture of ridge sinusoids]\label{lem:barron-A}
+Let $f$ be as in Theorem \ref{th:barron} and let $\eta > 0$. Unless $f$ is constant on $B_r$, there
+are a number $\Lambda_\eta \in (0,\, C_f + \eta]$, a probability measure $P$ on
+$\R^d \setminus \{0\}$, and a family $\big(g(\cdot,\xi)\big)_\xi$ of functions on $B_r$ such that
+\[
+f(x) - f(0) = \int_{\R^d\setminus\{0\}} g(x,\xi)\, \dd P(\xi)
+\quad \text{for every } x \in B_r,
+\qquad
+\sup_{\xi}\ \norm{g(\cdot,\xi)}_{L^\infty(B_r)} \le r\, \Lambda_\eta,
+\]
+and each $g(\cdot,\xi)$ has the form $x \mapsto h_\xi(a_\xi \cdot x)$ with $a_\xi \in \R^d$ a unit
+vector and $h_\xi : [-r,r]\to\R$ Lipschitz with constant $\le \Lambda_\eta$ and $h_\xi(0)=0$.
+\end{lemma}
+
+\begin{proof}
+The infimum in Definition \ref{def:barron} need not be attained, so we fix $\eta > 0$ and choose a
+representing measure $\nu$ with $\int\abs\xi\,\dd\abs\nu \le C_f + \eta$. Let
+$\dd\nu = \ee^{\ii\theta(\xi)}\dd\abs\nu(\xi)$ be its polar decomposition. Since $f$ is real
+valued,
+\[
+f(x) - f(0)
+= \operatorname{Re} \int \big(\ee^{\ii \xi\cdot x} - 1\big)\dd\nu(\xi)
+= \int \Big( \cos\big(\xi\cdot x + \theta(\xi)\big) - \cos\theta(\xi) \Big)\, \dd\abs{\nu}(\xi) .
+\]
+Set $\Lambda_\eta := \int_{\xi \ne 0} \abs\xi\, \dd\abs{\nu}(\xi) \le C_f + \eta$; note that any
+atom of $\nu$ at $\xi = 0$ contributes to neither side, the integrand vanishing there. If
+$\Lambda_\eta = 0$ then $\abs\nu$ is carried by $\{0\}$ and $f$ is constant on $B_r$, the case
+excluded by hypothesis. Otherwise put
+\[
+\dd P(\xi) := \frac{\abs\xi\,\dd\abs{\nu}(\xi)}{\Lambda_\eta}
+\quad\text{(a probability measure on } \R^d\setminus\{0\}),
+\qquad
+g(x,\xi) := \frac{\Lambda_\eta}{\abs\xi}\Big( \cos\big(\xi\cdot x + \theta(\xi)\big) - \cos\theta(\xi)\Big).
+\]
+Then $f(x) - f(0) = \int g(x,\xi)\dd P(\xi)$ by construction. Moreover, since
+$\abs{\cos(u+v) - \cos u} \le \abs v$,
+\[
+\abs{g(x,\xi)} \le \frac{\Lambda_\eta}{\abs\xi}\,\abs{\xi\cdot x} \le \Lambda_\eta\, \abs x \le r\, \Lambda_\eta
+\qquad \text{for } x \in B_r .
+\]
+Finally, setting $a_\xi := \xi/\abs\xi$ and
+$h_\xi(z) := \frac{\Lambda_\eta}{\abs\xi}\big(\cos(\abs\xi z + \theta(\xi)) - \cos\theta(\xi)\big)$,
+we have $g(x,\xi) = h_\xi(a_\xi\cdot x)$, $h_\xi(0) = 0$, and
+$\abs{h_\xi'(z)} = \frac{\Lambda_\eta}{\abs\xi}\,\abs\xi\, \abs{\sin(\abs\xi z + \theta)} \le \Lambda_\eta$.
+\end{proof}
+
+\begin{lemma}[Stage B: a Lipschitz function is a mixture of steps]\label{lem:barron-B}
+Let $h : [-r,r] \to \R$ be Lipschitz with constant $\le \Lambda$ and $h(0) = 0$. Then, for every
+$z \in [-r,r]$,
+\[
+h(z) = \int_{-r}^{r} h'(u)\, s_u(z)\, \dd u,
+\qquad \text{where } \
+s_u(z) := \begin{cases} \ind_{\{z > u\}} & \text{if } u \ge 0,\\[2pt]
+-\,\ind_{\{z < u\}} & \text{if } u < 0. \end{cases}
+\]
+In particular $h$ belongs to
+$\overline{\co}\big( \{\pm 2r\Lambda\, s_u : u \in [-r,r]\} \cup \{0\}\big)$ for convergence in
+$L^2$ of any finite measure on $[-r,r]$.
+\end{lemma}
+
+\begin{proof}
+$h$ is Lipschitz, hence absolutely continuous, and $h(z) = \int_0^z h'(u)\dd u$ with
+$\abs{h'} \le \Lambda$ almost everywhere. If $z \ge 0$:
+\[
+\int_{-r}^r h'(u)s_u(z)\dd u
+= \int_{0}^{r} h'(u)\ind_{\{z>u\}}\dd u - \int_{-r}^{0} h'(u)\ind_{\{z<u\}}\dd u
+= \int_0^z h'(u)\dd u - 0 = h(z),
+\]
+the second integral vanishing because $u < 0 \le z$ rules out $z < u$. If $z < 0$:
+\[
+\int_{-r}^r h'(u)s_u(z)\dd u = 0 - \int_{z}^{0} h'(u)\dd u = h(z) - h(0) = h(z).
+\]
+For the second assertion: $\int_{-r}^r \abs{h'(u)}\dd u \le 2r\Lambda$. Setting
+$m := \int \abs{h'}$ and, if $m>0$, $\dd Q(u) := \abs{h'(u)}\dd u / m$, we get
+\[
+h(z) = m \int \operatorname{sgn}\big(h'(u)\big)\, s_u(z)\, \dd Q(u)
+= \int \Big[ \tfrac{m}{2r\Lambda}\cdot \operatorname{sgn}(h'(u))\, 2r\Lambda\, s_u(z)
++ \big(1 - \tfrac{m}{2r\Lambda}\big)\cdot 0 \Big]\dd Q(u),
+\]
+which is a mixture (an integral against a probability measure) of elements of the stated family.
+Such a mixture belongs to the closed convex hull: this is exactly the content of the variance
+computation in Lemma \ref{lem:maurey}, applied to $n$ i.i.d.\ draws from $Q$.
+\end{proof}
+
+\begin{proof}[Proof of Theorem \ref{th:barron}]
+We work in the Hilbert space $\Hh = L^2(\mu)$, where $\mu$ is a probability measure on $B_r$. If
+$f$ is constant on $B_r$ the statement is trivial, so assume otherwise, fix $\eta > 0$ and let
+$\Lambda_\eta \le C_f + \eta$ be as in Lemma \ref{lem:barron-A}. Set
+\[
+G_\sigma := \big\{ x \mapsto \pm\, 2r \Lambda_\eta\, \sigma(w\cdot x + b)\ :\ w \in \R^d,\ b \in \R \big\} \cup \{0\}.
+\]
+Since $0 \le \sigma \le 1$ and $\mu$ is a probability measure,
+$\sup_{g \in G_\sigma}\norm{g}_{L^2(\mu)} \le 2r\Lambda_\eta =: \beta$.
+
+\smallskip\noindent
+\emph{(1) Steps lie in $\overline{\co}(G_\sigma)$.}
+Let $a \in \R^d$ be a unit vector and $u \in [-r,r]$. As $\lambda \to +\infty$,
+\[
+\sigma\big(\lambda(a\cdot x - u)\big) \longrightarrow \ind_{\{a\cdot x > u\}},
+\qquad
+-\,\sigma\big(\lambda(u - a\cdot x)\big) \longrightarrow -\,\ind_{\{a\cdot x < u\}},
+\]
+pointwise at every $x$ with $a\cdot x \ne u$. Both approximants are of the form
+$\pm\sigma(w\cdot x + b)$, so their multiples by $2r\Lambda_\eta$ lie in $G_\sigma$; in particular
+\emph{no additive constant is needed}, which is why the two cases are treated separately rather
+than through $\ind_{\{a\cdot x<u\}} = 1 - \ind_{\{a\cdot x>u\}}$. If $\mu(\{x : a\cdot x = u\}) = 0$,
+dominated convergence upgrades the pointwise convergence to convergence in $L^2(\mu)$, so
+$\pm 2r\Lambda_\eta\, s_u \in \overline{G_\sigma}$. The set of $u \in [-r,r]$ for which
+$\mu(\{a\cdot x = u\}) > 0$ is at most countable, hence Lebesgue-null: it does not affect the
+integral in Lemma \ref{lem:barron-B}.
+
+\smallskip\noindent
+\emph{(2) Each $g(\cdot,\xi)$ lies in $\overline{\co}(G_\sigma)$.}
+By Lemma \ref{lem:barron-A}, $g(\cdot,\xi) = h_\xi(a_\xi \cdot x)$ with $h_\xi$ Lipschitz of
+constant $\le \Lambda_\eta$ and $h_\xi(0)=0$; by Lemma \ref{lem:barron-B} (with
+$\Lambda = \Lambda_\eta$), $h_\xi$ is a mixture of functions $\pm 2r\Lambda_\eta\, s_u$, hence, by
+(1) together with convexity and closedness of $\overline{\co}(G_\sigma)$,
+$g(\cdot,\xi) \in \overline{\co}(G_\sigma)$.
+
+\smallskip\noindent
+\emph{(3) $f - f(0) \in \overline{\co}(G_\sigma)$.}
+By Lemma \ref{lem:barron-A}, $f - f(0) = \int g(\cdot,\xi)\dd P(\xi)$, a mixture of elements of the
+closed convex set $\overline{\co}(G_\sigma)$; by the same variance argument as in
+Lemma \ref{lem:maurey}, this mixture is a limit in $L^2(\mu)$ of finite averages of elements of
+$\overline{\co}(G_\sigma)$, hence belongs to it.
+
+\smallskip\noindent
+\emph{(4) Conclusion.} Maurey's lemma \ref{lem:maurey} applied with $\Hh = L^2(\mu)$,
+$G = G_\sigma$, $\beta = 2r\Lambda_\eta$ and $f - f(0) \in \overline{\co}(G_\sigma)$ yields
+$g_1,\dots,g_n \in G_\sigma$ with
+\[
+\Big\| f - f(0) - \frac1n \sum_{i=1}^n g_i \Big\|_{L^2(\mu)}
+\le \frac{2r\Lambda_\eta}{\sqrt n} + \frac{\varepsilon}{2}
+\le \frac{2rC_f}{\sqrt n} + \frac{2r\eta}{\sqrt n} + \frac{\varepsilon}{2} .
+\]
+Choosing $\eta \le \varepsilon/(4r)$ at the outset absorbs the middle term, giving the stated
+bound. Each $g_i$ is of the form $\pm 2r\Lambda_\eta\,\sigma(w_i\cdot x + b_i)$ (or $0$); setting
+$c_i = \pm 2r\Lambda_\eta/n$ gives the stated form, with
+$\sum_i \abs{c_i} \le 2r\Lambda_\eta \le 2rC_f + \varepsilon$.
+\end{proof}
+
+\begin{keybox}
+\textbf{Reading the theorem.} To reach $L^2$ error $\varepsilon$ on $\Gamma_C$ it suffices to take
+$n = O\big((rC/\varepsilon)^2\big)$ neurons, \emph{whatever the dimension $d$}. The theorem provides
+a sufficient width; it asserts neither an equivalence nor a lower bound. Compare with
+\eqref{eq:kolm}, where the two-sided $n \asymp \varepsilon^{-d/s}$ \emph{is} legitimate, being read
+off a Kolmogorov $n$-width --- a quantity defined as an infimum over all linear methods.
+
+\smallskip
+\textbf{Two essential caveats.} \emph{(a)} The constant $C_f$ may itself grow with $d$; it grows
+like $\sqrt d$ for the Gaussian (Proposition \ref{prop:barron-elem}), but can grow exponentially
+for other families. The absence of the curse is therefore \emph{conditional on a structural
+hypothesis on $f$}, not free. \emph{(b)} The theorem is an \emph{existence} result: it says nothing
+about how to find the $(c_i,w_i,b_i)$. We shall see in Session 6 that gradient descent does not, in
+general, find them.
+\end{keybox}
+
+% ================================================================
+\section{Approximation in Sobolev norms}
+
+\subsection{Why this is the right question for PINNs}
+
+A PINN does not minimise $\norm{u - \Phi_\theta}$ but $\norm{\Dd[\Phi_\theta] - f}$. For an
+operator of order $m$ one must therefore control $\Phi_\theta$ \emph{and its derivatives up to
+order $m$}: what we need are approximation statements in $W^{m,p}$, not in $L^p$ or $C^0$. This is
+a strictly harder question: approximating a function in the uniform norm implies nothing about its
+derivatives.
+
+\subsection{The mechanism: emulating monomials by finite differences}
+
+The following elementary lemma contains the idea behind many of the modern constructions.
+
+\begin{lemma}[Emulating $x^2$]\label{lem:emul}
+Let $\sigma \in C^4(\R)$ and let $a \in \R$ satisfy $\sigma''(a) \ne 0$. For $h > 0$ set
+\[
+\Psi_h(x) := \frac{\sigma(a + hx) + \sigma(a - hx) - 2\sigma(a)}{h^2\, \sigma''(a)} .
+\]
+Then $\Psi_h$ is realised by a network with one hidden layer of three neurons, and for every
+$R > 0$ there is $\kappa = \kappa(R,\sigma,a)$ such that, for $0 < h \le 1$,
+\[
+\sup_{\abs x \le R} \abs{\Psi_h(x) - x^2} \le \kappa\, h^2,
+\qquad
+\sup_{\abs x \le R} \abs{\Psi_h'(x) - 2x} \le \kappa\, h^2 .
+\]
+\end{lemma}
+
+\begin{proof}
+Taylor's formula with Lagrange remainder at order 4 around $a$ gives, for $\abs{u} \le hR$,
+\[
+\sigma(a+u) + \sigma(a-u) - 2\sigma(a) = \sigma''(a)\, u^2 + \frac{u^4}{24}\,\big(\sigma^{(4)}(\eta_+) + \sigma^{(4)}(\eta_-)\big)
+\]
+for some $\eta_\pm$ between $a$ and $a \pm u$ (the odd-order terms cancel; the coefficient is
+$1/4! = 1/24$, once for each of the two expansions). With $u = hx$ and
+$M_4 := \sup_{\abs{t - a} \le R}\abs{\sigma^{(4)}(t)}$:
+\[
+\abs{\Psi_h(x) - x^2} \le \frac{h^4 x^4}{24\, h^2 \abs{\sigma''(a)}} \cdot 2 M_4
+\le \frac{R^4 M_4}{12\,\abs{\sigma''(a)}}\; h^2 .
+\]
+For the derivative, $\Psi_h'(x) = \dfrac{\sigma'(a+hx) - \sigma'(a-hx)}{h\,\sigma''(a)}$, and
+Taylor at order 3 applied to $\sigma'$ gives
+\[
+\sigma'(a+u)-\sigma'(a-u) = 2u\,\sigma''(a) + \frac{u^3}{6}\big(\sigma^{(4)}(\zeta_+) + \sigma^{(4)}(\zeta_-)\big),
+\]
+whence $\abs{\Psi_h'(x) - 2x} \le \dfrac{R^3 M_4}{3\abs{\sigma''(a)}}\, h^2$. Take $\kappa$ to be the
+maximum of the two constants.
+\end{proof}
+
+\begin{remark}[The price: enormous weights]\label{rem:weights}
+The network $\Psi_h$ has output weights of size $1/(h^2\abs{\sigma''(a)})$: to gain a factor $h^2$
+in accuracy one pays a growth of $h^{-2}$ in the parameters. This is not an artefact of the
+construction: many constructive approximation results in Sobolev norm by smooth networks exhibit
+some form of this trade-off. Weight size is not
+a detail --- it appears explicitly in the generalisation bounds of Session 5, where it controls the
+Lipschitz constant of the residual, hence the quadrature error.
+\end{remark}
+
+\begin{remark}
+For $\sigma = \tanh$ one has $\sigma''(t) = -2\tanh(t)\sech^2(t)$, which vanishes at $0$: one must
+therefore take $a \ne 0$, for instance $a = 1$ where $\sigma''(1) \approx -0.64$. The fact that
+$\tanh$ is odd explains why the constructions in the literature work around an off-centre point.
+\end{remark}
+
+\subsection{The reference statements}
+
+\begin{theorem}[De Ryck, Lanthaler, Mishra, 2021 --- simplified asymptotic form]\label{th:drlm}
+Let $d, s, k \in \N$ with $k < s$ and let $f \in W^{s,\infty}\big((0,1)^d\big)$. For every $N$
+large enough there is a network $\Phi$ with activation $\tanh$, \emph{two} hidden layers and width
+$O(N^d)$, whose weights are bounded by an explicit power of $N$, such that
+\[
+\norm{f - \Phi}_{W^{k,\infty}((0,1)^d)} \;\le\; C(d,s,k,f)\ \frac{(\log N)^{k}}{N^{\,s-k}} .
+\]
+\end{theorem}
+
+\begin{theorem}[Gühring, Kutyniok, Petersen, 2020 --- simplified asymptotic form]\label{th:gkp}
+Let $1 \le p \le \infty$, let $n \ge 2$ be the Sobolev regularity of the target and let
+$s \in [0,1]$ be the order in which the error is measured. For every $\varepsilon \in (0,\tfrac12)$
+and every $f$ in the unit ball of $W^{n,p}((0,1)^d)$ there is a ReLU network $\Phi$ of depth
+$O\big(\log(1/\varepsilon)\big)$ with
+\[
+O\Big( \varepsilon^{-d/(n-s)}\,\log^2(1/\varepsilon) \Big) \ \text{ weights, such that }\quad
+\norm{f - \Phi}_{W^{s,p}((0,1)^d)} \le \varepsilon .
+\]
+\end{theorem}
+
+\begin{remark}[Read the sources, not these boxes]\label{rem:sobolev-caveat}
+Both statements above are \emph{simplified asymptotic forms}, given for fixed data, and neither is
+the literal theorem of the paper it is attributed to. In De Ryck--Lanthaler--Mishra (Theorem 5.1) the
+constant depends on $f$ in a way that does not factor out as $\norm{f}_{W^{s,\infty}}$, the
+logarithm appears inside a factor of the form $\max\{R^k,\ \log^k(\beta N^{s+d+2})\}$, and the
+conclusion holds only beyond an explicit threshold $N_0(d)$. In Gühring--Kutyniok--Petersen the
+relevant statements are Theorem 4.1 and Corollary 4.2, whose hypotheses on the network class and on
+$(n,s,p)$ are more restrictive than the shorthand above suggests --- note in particular that the
+error order $s$ is a real number in $[0,1]$, not an integer, and that the regularity is $n \ge 2$.
+Anyone using either result quantitatively must go back to the paper; these boxes are here to convey
+the shape of the answer, not its constants.
+\end{remark}
+
+\begin{keybox}
+\textbf{Three readings.}
+\begin{enumerate}[label=(\alph*)]
+\item Theorem \ref{th:gkp} is \emph{restricted to error orders $s \le 1$}: ReLU realisations do not
+in general belong to $W^{2,p}$, their second derivatives being distributions or measures rather than
+$L^p$ functions. This is the same obstruction as in Proposition \ref{prop:relu}, seen from the side
+of rates.
+\item The rates are of the form $N^{-(s-k)}$ with width $O(N^d)$: in other words,
+\emph{the curse of dimensionality is very much present} for Sobolev classes. Barron's theorem
+circumvents it only by changing the class of functions.
+\item Differentiation costs. Within this family of bounds, raising by one the order in which the
+error is measured loses a whole order in the rate; for a second-order PDE one therefore loses two
+orders relative to what the same architecture achieves in $L^\infty$. Keep the logical status
+straight: these are existential \emph{upper} bounds, so what the statement records is a limitation
+of what is currently provable, not a proven lower bound, and certainly not a complete causal account
+of observed numerical performance. It is nevertheless a feature shared by the constructions we know,
+and it is a reasonable first thing to have in mind when comparing PINNs with classical methods on
+smooth problems in low dimension.
+\end{enumerate}
+\end{keybox}
+
+% ================================================================
+\section{Depth versus width}
+
+The theorems above use one or two hidden layers. Does depth bring anything? The answer, due to
+Telgarsky, is yes, and exponentially so.
+
+\begin{definition}[Hat map and sawtooth]
+Let $\Delta : [0,1] \to [0,1]$ be defined by $\Delta(x) = 2x$ for $x \le \tfrac12$ and
+$\Delta(x) = 2(1-x)$ for $x \ge \tfrac12$. Write
+$\Delta^{\circ k} = \Delta \circ \cdots \circ \Delta$ ($k$ times).
+\end{definition}
+
+\begin{center}
+\begin{tikzpicture}[scale=1]
+\begin{axis}[
+  width=13cm, height=4cm,
+  xmin=0, xmax=1, ymin=0, ymax=1.08,
+  axis lines=left, tick align=outside,
+  xtick={0,0.25,0.5,0.75,1}, ytick={0,1},
+  xlabel style={font=\scriptsize}, ylabel style={font=\scriptsize},
+  tick label style={font=\scriptsize, color=coursgrey},
+  axis line style={color=coursgrey},
+  legend style={font=\scriptsize, draw=none, fill=none, at={(1.0,1.25)}, anchor=north east},
+  legend cell align=left
+]
+\addplot[coursteal, thick, mark=none] coordinates {(0,0)(0.5,1)(1,0)};
+\addlegendentry{$\Delta$}
+\addplot[courswine, thick, mark=none] coordinates {(0,0)(0.25,1)(0.5,0)(0.75,1)(1,0)};
+\addlegendentry{$\Delta^{\circ 2}$}
+\addplot[coursochre, thick, mark=none, densely dashed] coordinates
+  {(0,0)(0.125,1)(0.25,0)(0.375,1)(0.5,0)(0.625,1)(0.75,0)(0.875,1)(1,0)};
+\addlegendentry{$\Delta^{\circ 3}$}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\begin{lemma}[Deep realisation]\label{lem:saw-deep}
+One has $\Delta(x) = 2\ReLU(x) - 4\ReLU(x - \tfrac12)$ for $x \in [0,1]$. Consequently
+$\Delta^{\circ k}$ is realised by a ReLU network of depth $k+1$ and width $2$, hence with $2k$
+hidden neurons in total.
+\end{lemma}
+
+\begin{proof}
+For $x \in [0,\tfrac12]$: $2x - 0 = 2x = \Delta(x)$. For $x \in [\tfrac12,1]$:
+$2x - 4(x - \tfrac12) = 2 - 2x = \Delta(x)$. Composing $k$ blocks, each consisting of a hidden layer
+of two ReLU neurons followed by a linear combination, gives a network of depth $k+1$ (that is, $k$
+hidden layers) and width $2$.
+\end{proof}
+
+\begin{lemma}[Counting pieces]\label{lem:saw-pieces}
+\begin{enumerate}[label=(\roman*)]
+\item $\Delta^{\circ k}$ is piecewise affine on $[0,1]$ with exactly $2^k$ pieces: on each interval
+$I_{k,j} = [\,j\,2^{-k}, (j+1)2^{-k}\,]$, $0 \le j < 2^k$, it is affine and sweeps out all of
+$[0,1]$.
+\item Every function $\R \to \R$ of the form
+$x \mapsto c_0 + \sum_{i=1}^n c_i \ReLU(w_i x + b_i)$ is piecewise affine with at most $n+1$ pieces.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+(i) Induction on $k$. For $k=1$ this is the definition. Assume the property at rank $k$: on
+$I_{k,j}$, $\Delta^{\circ k}$ is affine and bijective from $I_{k,j}$ onto $[0,1]$. Then
+$\Delta^{\circ(k+1)} = \Delta \circ \Delta^{\circ k}$ restricted to $I_{k,j}$ is the composition of
+an affine bijection $I_{k,j} \to [0,1]$ with $\Delta$, hence is affine on each half of $I_{k,j}$ and
+sweeps out $[0,1]$ on each. This gives $2\cdot 2^k = 2^{k+1}$ pieces, which are exactly the
+$I_{k+1,j'}$.
+
+(ii) Each term $\ReLU(w_i x + b_i)$ is affine on $(-\infty, -b_i/w_i]$ and on
+$[-b_i/w_i, +\infty)$ (and affine everywhere if $w_i = 0$). The sum is therefore affine on each
+connected component of the complement of the $n$ points $\{-b_i/w_i\}$, of which there are at most
+$n+1$.
+\end{proof}
+
+\begin{theorem}[Depth/width separation, after Telgarsky 2016]\label{th:telgarsky}
+For every $k \ge 1$ the function $\Delta^{\circ k}$ is exactly realised by a ReLU network of depth
+$k+1$ with $2k$ neurons, whereas any ReLU network with a \emph{single} hidden layer realising it
+exactly has at least $2^k - 1$ neurons.
+\end{theorem}
+
+\begin{proof}
+The first assertion is Lemma \ref{lem:saw-deep}. For the second: if a network with one hidden layer
+of $n$ neurons realises $\Delta^{\circ k}$ on $[0,1]$, then by Lemma \ref{lem:saw-pieces}\,(ii) that
+function has at most $n+1$ affine pieces, whereas it has exactly $2^k$ by (i). Hence
+$n + 1 \ge 2^k$, that is, $n \ge 2^k - 1$.
+\end{proof}
+
+\begin{corollary}[Piece counting at arbitrary depth]\label{cor:pieces}
+A ReLU network $\R \to \R$ of depth $L$ whose hidden layers have $n_1,\dots,n_{L-1}$ neurons is
+piecewise affine with at most $\prod_{\ell=1}^{L-1}(n_\ell + 1)$ pieces. Hence, at a fixed total
+budget $n = \sum_\ell n_\ell$ of neurons, the number of pieces available grows exponentially in the
+depth and only linearly in the size of a single hidden layer.
+\end{corollary}
+
+\begin{proof}
+Exercise \ref{ex:telgarsky}, item 4.
+\end{proof}
+
+\begin{remark}[What Telgarsky actually proves]\label{rem:telgarsky-real}
+Theorem \ref{th:telgarsky} is a statement about \emph{exact representation}, obtained by counting
+pieces; it is the elementary version of the phenomenon and it is the one we prove. Telgarsky's
+published result is stronger and different in shape: he exhibits a function computed by a ReLU
+network with $\Theta(k^3)$ layers and $\Theta(1)$ nodes per layer such that every network with
+$O(k)$ layers built from semi-algebraic gates (ReLU, maximum, indicator, piecewise polynomial)
+needs $\Omega(2^k)$ nodes to come within a fixed constant of it in $L^1$. So the separation survives
+when one merely asks for \emph{approximation}, not exact representation. We do not prove this here;
+see the COLT 2016 paper.
+\end{remark}
+
+\begin{remark}[Relevance for PINNs]
+The lesson is that depth is useful for representing \emph{highly oscillatory} functions with few
+parameters. In practice PINNs use moderately deep (4 to 8 layers) and narrow (20 to 100 neurons)
+networks: a compromise between expressive power and the conditioning of the optimisation, which we
+shall analyse in Session 6.
+\end{remark}
+
+% ================================================================
+\section{Summary: what to retain}
+
+\begin{keybox}
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=*]
+\item \textbf{The class is not linear.} Fixed-size realisation classes are in general nonlinear and
+nonconvex; Proposition \ref{prop:nonconvex} exhibits this already for $\Sigma_1(\sigma)$, and
+Remark \ref{rem:nonclosed} adds that they need not be closed. Céa's lemma and the Galerkin machinery
+no longer apply, and uniqueness and attainment of the minimiser are no longer automatic. This is one
+major source of the difficulties in this course --- PDE stability, quadrature, sampling and the
+optimiser each contribute difficulties of their own, and we shall meet them in turn.
+\item \textbf{Universality holds, and by itself is useless.} For every continuous nonpolynomial
+$\sigma$, $\Sigma(\sigma)$ is dense in $C(K)$ (Theorems \ref{th:cybenko} and \ref{th:llps}). The
+proof is nonconstructive and gives no rate.
+\item \textbf{Rates are decided by the target class at least as much as by the architecture.}
+Activation, depth, width and weight constraints all enter the bounds; but the qualitative behaviour
+--- whether the curse of dimensionality appears at all --- is set by the class the target is assumed
+to lie in. On a Sobolev class the curse is present (Theorems \ref{th:drlm}, \ref{th:gkp}); on the
+Barron class it disappears (Theorem \ref{th:barron}), at the price of a spectral hypothesis whose
+constant may itself grow with $d$.
+\item \textbf{Approximating derivatives costs orders.} For an operator of order $m$ it is the
+$W^{m,\infty}$ norm that matters, and each order of differentiation costs one order of rate. The
+regularity of $\sigma$ is constrained by the order of the PDE (Proposition \ref{prop:relu}).
+\item \textbf{All of this is existential.} None of these results says that an algorithm will find
+the right $\theta$. That question is formalised in Session 4 (error decomposition) and treated in
+Session 6 (analysis of training) --- where it will turn out that this is where a substantial part of
+the practical difficulty lies.
+\end{enumerate}
+\end{keybox}
+
+\medskip
+\noindent
+\textbf{Session 2.} How does one compute $\nabla_\theta J$ and $\partial^\alpha_x \Phi_\theta$?
+Automatic differentiation in forward and reverse mode; nonconvex optimisation; what Adam actually
+does, and why the PINN literature systematically chains Adam and L-BFGS.
+
+% ================================================================
+\newpage
+\section{Problem set}
+
+\begin{exercise}[Regularity of the activation and the strong residual]\label{ex:relu}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Let $\Phi(x) = \sum_{i=1}^n c_i \ReLU(w_i x + b_i) + c_0$ with $d = 1$. Show that $\Phi$ is
+continuous and piecewise affine, and compute $\Phi''$ in the sense of distributions.
+\item Deduce that for the problem $-u'' = f$ on $(0,1)$ the strong residual $\Rr(v) = -v'' - f$ is
+not a function when $\sigma = \ReLU$, so that
+$\theta \mapsto \frac1N \sum_{i=1}^N \abs{\Rr(\Phi_\theta)(x_i)}^2$ is not defined by the PDE. Then
+ask the more useful question: what does an automatic-differentiation library actually compute here,
+and what is the resulting loss equal to?
+\item Now let $\sigma \in C^m(\R)$ and let $\Dd$ be a differential operator of order $m$ with
+continuous coefficients. Show that $\Rr(\Phi_\theta)$ is continuous, hence that pointwise evaluation
+is legitimate.
+\item \emph{(Weak formulation.)} Consider the Deep Ritz functional
+$\Ee(v) = \int_0^1 \big( \tfrac12 \abs{v'}^2 - f v \big)$. For which regularity of $\sigma$ is it
+defined? Comment.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Structure of the class]\label{ex:structure}
+Let $\sigma = \tanh$ and $d \ge 2$.
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Show that $\Sigma_n(\sigma)$ is a cone: stable under multiplication by a scalar.
+\item Show that $\Sigma_n(\sigma) + \Sigma_m(\sigma) \subseteq \Sigma_{n+m}(\sigma)$, and that the
+inclusion is strict for $n = m = 1$.
+\item Revisit the proof of Proposition \ref{prop:nonconvex} and adapt it to the case $d = 1$: show
+that $\tfrac12\big(\tanh(x) + \tanh(2x)\big) \notin \Sigma_1(\tanh)$.
+\emph{Hint: counting inflection points is the natural first attempt --- show that it fails ---
+then use oddness, the limits at $\pm\infty$, and the Taylor expansions at $0$.}
+\item Deduce that the functional $\theta \mapsto \norm{f - \Phi_\theta}_{L^2}^2$ can fail to be
+convex in $\theta$ even when $f$ is analytic and exactly representable in the class.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[The polynomial case]\label{ex:poly}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Let $\sigma(t) = t^2$. Describe $\Sigma(\sigma)$ exactly for $d = 1$, then for general $d$.
+\item Show that with $\sigma(t) = t^2$ and \emph{fixed} depth $L$, one has
+$\Nn^\sigma_{L,W}(d) \subseteq \Pp_{2^{L-1}}(\R^d)$ for every width $W$, and deduce that this class
+is not dense in $C(K)$.
+\item Now let the depth vary. Using $xy = \tfrac14\big((x+y)^2 - (x-y)^2\big)$, show that
+$\bigcup_{L,W} \Nn^{t^2}_{L,W}(d)$ contains every polynomial, and is therefore dense in $C(K)$.
+Reconcile this with item 2.
+\item In what way does this example illuminate the statement of Theorem \ref{th:llps}? Which class
+does that theorem quantify over?
+\item Let $\sigma$ be $C^\infty$, nonpolynomial, but with $\sigma^{(k)}(0) = 0$ for every $k \ge 3$.
+Does such a $\sigma$ exist? What happens to the proof of
+Proposition \ref{prop:llps-smooth}?
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Maurey's lemma and its optimality]\label{ex:maurey}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Reprove Lemma \ref{lem:maurey}, writing out the cancellation of the cross terms in detail.
+\item Let $\Hh = \ell^2$ and $G = \{\pm e_j : j \ge 1\}$ (a Hilbert basis). Let
+$f = \frac1m \sum_{j=1}^m e_j$. Check that $f \in \co(G)$ and compute $\norm f$. What does the lemma
+give?
+\item Show that in this example, with $m = 2n$, any average of $n$ elements of $G$ is at distance
+$\ge \tfrac12 n^{-1/2}$ from $f$. Deduce that the rate $n^{-1/2}$ is optimal.
+\item \emph{(Open-ended.)} Is the rate $n^{-1/2}$ improved if $\Hh$ has finite dimension $D$?
+Compare with $D^{-1/2}$ and comment on the role of $D$ in applications.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[The Barron class]\label{ex:barron}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Prove item (ii) of Proposition \ref{prop:barron-elem}: $f \in \Gamma_C$ implies $f$ Lipschitz
+with constant $\le C$.
+\item Give an upper bound for $C_f$ when $f(x) = \ee^{-\abs x^2/2}$ in dimension $d$, and an
+equivalent of that bound as $d \to \infty$. Why is one not entitled to write an equality here?
+\item Compute $C_f$ \emph{exactly} when $f(x) = \sin(K x_1)$, $K > 0$: an upper bound by exhibiting
+a representing measure, and a matching lower bound from item (ii) of
+Proposition \ref{prop:barron-elem}. Comment: is the Barron class a regularity class? Is it
+indifferent to regularity?
+\item Let $f(x) = \prod_{i=1}^d \cos(x_i)$. Show that $C_f \le \sqrt d$ and discuss: is Barron's
+theorem useful for this function in high dimension?
+\item \emph{(Link with Session 6.)} Is a PDE solution belonging to $\Gamma_C$ with $C$ large hard
+for a PINN? Formulate a conjecture and keep it in mind for Session 6.
+\end{enumerate}
+\end{exercise}
+
+\begin{exercise}[Telgarsky's sawtooth]\label{ex:telgarsky}
+\leavevmode
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item Check that $\Delta(x) = 2\ReLU(x) - 4\ReLU(x - \tfrac12)$ on $[0,1]$.
+\item Prove by induction that $\Delta^{\circ k}$ has exactly $2^k$ affine pieces.
+\item Deduce Theorem \ref{th:telgarsky}.
+\item \emph{(Generalisation.)} Show that a ReLU network $\R \to \R$ of depth $L$ whose hidden layers
+have $n_1,\dots,n_{L-1}$ neurons has at most $\prod_{\ell}(n_\ell + 1)$ affine pieces. Compare with
+the number of neurons $\sum_\ell n_\ell$ and conclude as to the exponential advantage of depth.
+\item What becomes of this advantage if ReLU is replaced by $\tanh$?
+\end{enumerate}
+\end{exercise}
+
+% ================================================================
+
+\ifsolutions
+\newpage
+\section{Solutions}
+
+\subsection*{Exercise \ref{ex:relu}}
+
+\textbf{1.} Each $\ReLU(w_i x + b_i)$ is affine on $(-\infty, \tau_i]$ and on $[\tau_i,+\infty)$
+with $\tau_i = -b_i/w_i$ (if $w_i \ne 0$; otherwise the function is constant). Hence $\Phi$ is
+affine on each component of the complement of $\{\tau_1,\dots,\tau_n\}$, and continuous by
+continuity of $\ReLU$.
+
+In the sense of distributions, for $w \ne 0$,
+\[
+\big(\ReLU(w x + b)\big)'' = \abs{w}\,\delta_{-b/w}.
+\]
+The quickest check is the jump of the first derivative: $\big(\ReLU(wx+b)\big)' = w\,H(wx+b)$ with
+$H$ the Heaviside function, which for $w > 0$ jumps from $0$ to $w$ at $\tau = -b/w$, and for
+$w < 0$ jumps from $w$ to $0$; in both cases the jump equals $\abs{w}$. Equivalently, in the change
+of variable $y = wx+b$ the two differentiations contribute $w^2$ while the Jacobian contributes
+$\abs{w}^{-1}$, and $w^2/\abs{w} = \abs{w}$. Therefore
+\[
+\Phi'' = \sum_{i \,:\, w_i \ne 0} c_i\, \abs{w_i}\, \delta_{\tau_i},
+\]
+a finite combination of Dirac masses. \emph{(Note the modulus. Writing $w_i^2$ here --- keeping the
+two differentiations and forgetting the Jacobian --- is the standard slip.)}
+
+\textbf{2.} $\Rr(\Phi_\theta) = -\Phi_\theta'' - f$ is the sum of a singular measure and a function,
+so it is not a function and $\Rr(\Phi_\theta)(x_i)$ is not defined by the PDE. But the sharp
+statement --- the one to give in class --- is about what happens in code. Automatic differentiation
+does not return the distributional derivative; it returns the classical one, which exists and equals
+$0$ at every point off the finite set $\{\tau_i\}$. At generic collocation points the interior loss
+is therefore numerically well defined and equal to $\frac1N\sum_i \abs{f(x_i)}^2$: a constant, with
+identically zero gradient in $\theta$. So the failure mode is not ``the code refuses to run'' but
+``the residual term is blind'' --- it contains no information about $\theta$ whatsoever. Saying only
+that the loss is meaningless hides this distinction, which is the one a student will meet in
+practice.
+
+\textbf{3.} By Proposition \ref{prop:stable}\,(iv), $\Phi_\theta \in C^m$; the derivatives
+$\partial^\alpha \Phi_\theta$ for $\abs\alpha \le m$ are continuous, and $\Dd[\Phi_\theta]$, a
+finite sum of products of continuous functions, is continuous too. Pointwise evaluation is therefore
+well defined.
+
+\textbf{4.} $\Ee(v)$ requires $v \in H^1(0,1)$. A \emph{locally Lipschitz} activation suffices on a
+bounded domain --- $\ReLU$ qualifies --- but mere continuity of $\sigma$ does not: a continuous
+realisation need not lie in $H^1$. This is precisely the point of variational formulations: they
+restore compatibility with nonsmooth activations and lower the order of differentiation that
+automatic differentiation must handle (Session 7). In exchange they introduce a quadrature of an
+energy integral, whose variance becomes the new problem. Note also that VPINNs, which integrate by
+parts against test functions, impose a different requirement again; Deep Ritz and VPINN should not
+be described by a single condition on $\sigma$.
+
+\subsection*{Exercise \ref{ex:structure}}
+
+\textbf{1.} $\lambda \sum_i c_i \sigma(w_i\cdot x + b_i) = \sum_i (\lambda c_i)\sigma(w_i \cdot x+b_i)$.
+
+\textbf{2.} The inclusion is concatenation of the sums. For strictness with $n = m = 1$:
+Proposition \ref{prop:nonconvex} provides $f_1 + f_2 \in \Sigma_2 \setminus \Sigma_1$ (up to the
+constant $\tfrac12$, absorbed by item 1).
+
+\textbf{3.} We must show that $g(x) = \tfrac12(\tanh x + \tanh 2x)$ is not of the form
+$c\tanh(wx+b)$. Every function $c\tanh(wx+b)$ with $cw \ne 0$ is strictly monotone and has
+\emph{exactly one} inflection point, at $x = -b/w$ (because $\tanh''(t) = -2\tanh t\,\sech^2 t$
+vanishes only at $t = 0$, where it changes sign). But
+\[
+g''(x) = \tfrac12\Big( -2\tanh(x)\sech^2(x) - 8 \tanh(2x)\sech^2(2x) \Big) = -\big(\psi(x) + 4\psi(2x)\big),
+\qquad \psi(t) := \tanh(t)\sech^2(t).
+\]
+The function $\psi$ is odd, strictly positive on $(0,+\infty)$ and strictly negative on
+$(-\infty,0)$. Hence $\psi(x) + 4\psi(2x) > 0$ for $x > 0$ and $< 0$ for $x < 0$: $g''$ vanishes
+only at $0$. So counting inflection points yields \emph{no} contradiction --- a further argument is
+needed.
+
+Compare the asymptotic behaviours instead. If $g(x) = c\tanh(wx+b)$, then
+$\lim_{x\to+\infty} g = c\,\mathrm{sgn}(w)$ and $\lim_{x \to -\infty} g = -c\,\mathrm{sgn}(w)$,
+whereas $g(x) \to 1$ and $g(x) \to -1$. Hence $c\,\mathrm{sgn}(w) = 1$, and after adjusting signs we
+may assume $c = 1$, $w > 0$. Moreover $g$ is odd (as $\tanh$ is), so
+$\tanh(wx+b) = -\tanh(-wx+b) = \tanh(wx - b)$ for every $x$, which forces $b = 0$ by injectivity of
+$\tanh$. It remains to rule out $g(x) = \tanh(wx)$ for some $w > 0$. Now
+\[
+g'(0) = \tfrac12(1 + 2) = \tfrac32, \qquad \big(\tanh(w\cdot)\big)'(0) = w \ \Longrightarrow\ w = \tfrac32,
+\]
+but then, expanding to order $3$ at $0$ (using $\tanh t = t - t^3/3 + O(t^5)$):
+\[
+g(x) = \tfrac32 x - \tfrac12\big(\tfrac{1}{3} + \tfrac{8}{3}\big) x^3 + O(x^5) = \tfrac32 x - \tfrac32 x^3 + O(x^5),
+\qquad
+\tanh(\tfrac32 x) = \tfrac32 x - \tfrac{9}{8}x^3 + O(x^5),
+\]
+and $\tfrac32 \ne \tfrac98$. Hence $g \notin \Sigma_1(\tanh)$.
+
+\textbf{4.} There is a two-line counterexample, and it needs nothing from item 3. Take $d = 1$,
+$\Omega = (-1,1)$ (any set of positive measure will do), $f = \tanh$, and the two parameters
+\[
+\theta_+ = (c,w,b) = (1,1,0), \qquad \theta_- = (c,w,b) = (-1,-1,0).
+\]
+Since $\tanh$ is odd, $\Phi_{\theta_+}(x) = \tanh(x)$ and
+$\Phi_{\theta_-}(x) = -\tanh(-x) = \tanh(x)$: the two parameters realise the \emph{same} function,
+so
+\[
+J(\theta_+) = J(\theta_-) = 0 .
+\]
+But $\tfrac12(\theta_+ + \theta_-) = (0,0,0)$, whose realisation is the zero function, whence
+\[
+J\Big( \tfrac{\theta_+ + \theta_-}{2} \Big) = \norm{\tanh}_{L^2(\Omega)}^2 > 0 .
+\]
+A convex function cannot exceed the larger of its values at the endpoints of a segment; hence $J$ is
+not convex in $\theta$ --- and this for a target $f$ that is analytic and lies exactly in
+$\Sigma_1(\tanh)$, so that the global minimum is $0$ and is attained.
+
+\emph{A warning about the argument one is tempted to give instead.} It is not enough to observe that
+$\theta \mapsto \Phi_\theta$ is not affine. Composing a convex functional with a nonaffine map can
+perfectly well yield a convex function: $t \mapsto t^2$ composed with $x \mapsto x^2$ gives
+$x \mapsto x^4$, which is convex. Nonlinearity of the parametrisation is the \emph{reason to
+expect} nonconvexity; it is not a proof of it. The example above is a proof.
+
+\subsection*{Exercise \ref{ex:poly}}
+
+\textbf{1.} For $d = 1$: $\sigma(wx+b) = (wx+b)^2 = w^2x^2 + 2wbx + b^2$, so
+$\Sigma(\sigma) = \Pp_2(\R)$ --- the polynomials of degree $\le 2$ (one does obtain all three
+monomials: $b=0$ gives $x^2$, $w=0$ gives the constants, and a combination gives $x$). For general
+$d$: $\Sigma(\sigma) = \Pp_2(\R^d)$, by the same argument together with the polarisation of Step 2
+in Proposition \ref{prop:llps-smooth} applied with $k = 2$.
+
+\textbf{2.} By induction: one hidden layer maps a polynomial of degree $\le D$ to a polynomial of
+degree $\le 2D$ (composition with $t \mapsto t^2$), and affine combinations preserve the degree.
+Starting from $D = 1$ (the affine map $A_1$), after $L-1$ hidden layers one has $D \le 2^{L-1}$.
+Hence $\Nn^{t^2}_{L,W}(d) \subseteq \Pp_{2^{L-1}}(\R^d)$ for every width $W$; the right-hand side is
+finite-dimensional, hence closed and proper in $C(K)$, so this class is not dense --- \emph{at that
+fixed depth}.
+
+\textbf{3.} Let the depth grow. The identity $xy = \tfrac14\big((x+y)^2 - (x-y)^2\big)$ shows that
+a single hidden layer of two quadratic units followed by a linear combination computes the product
+of any two quantities already available at that layer. Starting from the inputs
+$x_1,\dots,x_d$ (and the constant $1$, available as $\sigma(0\cdot x + 1)$), one builds every
+degree-2 monomial with one hidden layer, every monomial of degree $\le 2^m$ with $m$ layers of
+pairwise products, and any linear combination of them in the output layer. Hence
+\[
+\bigcup_{L,W} \Nn^{t^2}_{L,W}(d) \ \supseteq\ \Pp(\R^d),
+\]
+which is dense in $C(K)$ by Stone--Weierstrass.
+
+There is no contradiction with item 2: density fails at each \emph{fixed} depth and holds only for
+the union over all depths. The correct slogan is therefore \emph{a polynomial activation is not
+universal at fixed depth}. The tempting slogan --- ``a quadratic activation never gets you out of
+the polynomials, so nothing can help'' --- is false as a conclusion: it never does get you out of
+the polynomials, and that is precisely enough, because the polynomials are dense.
+
+\textbf{4.} Theorem \ref{th:llps} quantifies over $\Sigma(\sigma)$, the span of a \emph{single}
+hidden layer. For that class, nonpolynomiality of $\sigma$ is necessary and sufficient, and
+$\sigma = t^2$ is not universal. Item 3 shows that the analogous statement for the union over all
+depths is \emph{false}. Keeping track of which class a theorem quantifies over is not pedantry
+here: it changes the answer. (The proof of Proposition \ref{prop:llps-smooth} makes the mechanism
+visible: it never composes layers, it only differentiates in the inner scaling parameter of one
+layer.)
+
+\textbf{5.} Yes, such a $\sigma$ exists: take $\sigma(t) = \ee^{-1/t^2}$ for $t > 0$ and
+$\sigma(t) = 0$ for $t \le 0$; all its derivatives vanish at $0$, and it is not polynomial. The
+proof of Proposition \ref{prop:llps-smooth} does not use $b = 0$ but the existence, for each $k$, of
+some $b_k$ with $\sigma^{(k)}(b_k) \ne 0$: here it suffices to take $b_k > 0$. The argument
+therefore goes through unchanged. This is a good comprehension check: nonpolynomiality is a
+\emph{global} property, not a local one at a point --- a function all of whose derivatives vanish at
+one point can still be universal.
+
+\subsection*{Exercise \ref{ex:maurey}}
+
+\textbf{1.} See the proof of Lemma \ref{lem:maurey}. In detail, for the cross terms:
+\[
+\E \Big\| \sum_{i=1}^n (G_i - f)\Big\|^2
+= \sum_{i,j} \E \scal{G_i - f}{G_j - f}
+= \sum_i \E \norm{G_i - f}^2 + \sum_{i \ne j} \scal{\E[G_i] - f}{\E[G_j] - f},
+\]
+and the second term vanishes because $\E[G_i] = f$ and $G_i, G_j$ are independent for $i \ne j$.
+
+\textbf{2.} $f = \frac1m\sum_{j\le m} e_j$ is indeed a convex combination of the $e_j \in G$, and
+$\norm f^2 = m \cdot (1/m)^2 = 1/m$. Here $\beta = 1$, so the lemma gives the existence of
+$g_1,\dots,g_n \in G$ with $\norm{f - \frac1n\sum g_i}^2 \le (1 - 1/m)/n$.
+
+\textbf{3.} Let $S = \frac1n \sum_{i=1}^n g_i$ with $g_i \in \{\pm e_j\}$. Then $S$ is supported on
+at most $n$ coordinates. Let $J$ be the set (of cardinality $\le n$) of those coordinates. Then
+\[
+\norm{f - S}^2 \ge \sum_{j \le m,\ j \notin J} \frac{1}{m^2} \ge \frac{m - n}{m^2} = \frac1m - \frac{n}{m^2}.
+\]
+Choosing $m = 2n$ gives $\norm{f-S}^2 \ge \frac{1}{2n} - \frac{1}{4n} = \frac{1}{4n}$, that is,
+$\norm{f - S} \ge \tfrac12 n^{-1/2}$. The rate $n^{-1/2}$ of the lemma is therefore optimal up to a
+constant.
+
+\textbf{4.} The tempting answer --- ``in dimension $D$ one can be exact as soon as $n \ge D$'' ---
+is false, and instructively so. Lemma \ref{lem:maurey} produces an \emph{equally weighted} average
+$\frac1n\sum_i g_i$, and a convex combination with, say, irrational weights is in general not an
+equal-weight average of elements of $G$, in any dimension whatsoever.
+
+What finite dimension does buy is the following. By Carathéodory's theorem, any $f \in \co(G)$ with
+$G \subseteq \Hh$ and $\dim \Hh = D$ is a convex combination $\sum_{j=1}^{D+1}\lambda_j h_j$ of at
+most $D+1$ elements of $G$. Round the weights to multiples of $1/n$: choose integers $k_j \ge 0$ with
+$\sum_j k_j = n$ and $\abs{\lambda_j - k_j/n} \le 1/n$ for each $j$. Then
+\[
+\Big\| f - \frac1n\sum_{j} k_j h_j \Big\|
+\ \le\ \sum_{j=1}^{D+1} \Big|\lambda_j - \frac{k_j}{n}\Big|\,\norm{h_j}
+\ \le\ \frac{(D+1)\,\beta}{n},
+\]
+an $O(D\beta/n)$ rate, which beats $\beta/\sqrt n$ once $n \gtrsim D^2$. So the dimension enters
+through a crossover point, not by making the problem exactly solvable.
+
+In applications $\Hh = L^2(\mu)$ is infinite-dimensional, but the \emph{effective} dimension of the
+problem --- the decay of the eigenvalues of the covariance operator --- plays an analogous role.
+This is the point of view we shall meet again in Session 9, on Kolmogorov $n$-widths in operator
+learning.
+
+\subsection*{Exercise \ref{ex:barron}}
+
+\textbf{1.} See Proposition \ref{prop:barron-elem}\,(ii). The key point is
+$\abs{\ee^{\ii a} - \ee^{\ii b}} = 2\abs{\sin\frac{a-b}{2}} \le \abs{a - b}$.
+
+\textbf{2.} Take $\dd\nu(\xi) = (2\pi)^{-d/2}\ee^{-\abs\xi^2/2}\dd\xi$ (check by the inversion
+formula that it represents $f$ on all of $\R^d$). Hence
+\[
+C_f \ \le\ \int_{\R^d}\abs\xi\,(2\pi)^{-d/2}\ee^{-\abs\xi^2/2}\dd\xi = \E\abs{Z},\quad Z\sim\Nn(0,I_d),
+\qquad
+\E\abs Z = \sqrt2\,\frac{\Gamma\big(\frac{d+1}2\big)}{\Gamma\big(\frac d2\big)} .
+\]
+By Stirling's formula, $\E\abs Z = \sqrt d\,\big(1 - \tfrac{1}{4d} + O(d^{-2})\big) \sim \sqrt d$.
+The growth is therefore \emph{polynomial and very slow}: for this structured family, Barron's bound
+avoids the generic Sobolev curse in high dimension. (It is a comparison of a bound for a specific
+function with a bound uniform over a Sobolev ball, so it is not a like-for-like contest.)
+
+This is the answer to the second half of the question. We have exhibited \emph{one} representing
+measure; a cheaper one, agreeing with $f$ only on $B_r$ and differing from it outside, is not
+excluded, and the infimum need not be attained
+(Remark \ref{rem:barron-hygiene}\,(c)). Writing $C_f = \E\abs Z$ would therefore be an unproved
+claim. An upper bound is in any case all that Theorem \ref{th:barron} consumes, since its conclusion
+is increasing in $C_f$.
+
+\textbf{3.} Take $\nu = \frac{1}{2\ii}\big(\delta_{Ke_1} - \delta_{-Ke_1}\big)$, a finite complex
+measure with $\int \ee^{\ii \xi\cdot x}\dd\nu(\xi) = \sin(Kx_1)$ for every $x$. Its total variation
+is $\abs\nu = \tfrac12(\delta_{Ke_1} + \delta_{-Ke_1})$, so
+$\int\abs\xi\dd\abs\nu = \tfrac12 K + \tfrac12 K = K$, whence $C_f \le K$.
+
+Here, unlike in item 2, the matching lower bound is immediate and should be given: by
+Proposition \ref{prop:barron-elem}\,(ii), $C_f$ dominates the Lipschitz constant of $f$ on $B_r$,
+and $\nabla f(x) = K\cos(Kx_1)e_1$ gives $\abs{\nabla f(0)} = K$. Hence $C_f \ge K$ and
+\[
+C_{\sin(K x_1)} = K .
+\]
+Without this lower bound the phrase ``the seminorm grows linearly with frequency'' would be an
+unproved reading of an upper bound.
+
+This is also the example that forces the definition to use measures rather than $L^1$ densities:
+$\sin(Kx_1)$ has no $L^1$ Fourier density, and mollifying the two atoms would destroy the
+\emph{exact} identity on $B_r$ that the definition requires.
+
+The moral, stated carefully. The spectral Barron seminorm is not determined by classical smoothness
+order alone: even an analytic function can have a seminorm that grows with frequency, so the class
+is not \emph{graded} by smoothness. Nevertheless a finite seminorm does impose regularity, since the
+representing measure has a finite first moment and the function therefore admits a $C^1$ extension
+(Remark \ref{rem:barron-c1}). What one must not say is that a rough function with concentrated
+spectrum is cheap in this class: within this definition there are no rough functions at all.
+
+\textbf{4.} $f(x) = \prod_i \cos(x_i) = 2^{-d}\sum_{\epsilon \in \{\pm1\}^d} \ee^{\ii \epsilon\cdot x}$,
+so take $\nu = 2^{-d}\sum_{\epsilon \in \{\pm1\}^d}\delta_\epsilon$: a positive measure carried by
+the $2^d$ points $\epsilon \in \{\pm1\}^d$, each of mass $2^{-d}$, with $\abs\epsilon = \sqrt d$.
+Hence $C_f \le 2^d \cdot 2^{-d}\cdot \sqrt d = \sqrt d$. Barron's theorem therefore says that
+\[
+n = O\!\left( \frac{r^2 d}{\varepsilon^2} \right) \quad \text{neurons \emph{suffice}}
+\]
+--- a sufficient width, not an equivalence and not a lower bound. The dependence on $d$ in this
+sufficient width is \emph{linear}, to be compared with the $\varepsilon^{-d/s}$ of linear methods. This is a favourable
+case and a nice example to give in class. (Note that $r$ itself typically grows like $\sqrt d$ if
+the domain is $[-1,1]^d$, giving a final dependence in $d^2$ --- still polynomial.)
+
+\textbf{5.} The expected conjecture: yes, with the logical status kept straight. High frequency
+content makes the function expensive for \emph{approximation} --- a large Barron seminorm, hence a
+potentially large \emph{sufficient} width according to Barron's bound, which is an upper bound and
+not a necessity --- and, separately, hard for \emph{optimisation}. Session 6 will show that the second effect is by far the more severe --- but it
+is important to state in which regime this is a theorem. In the regime where the analysis is
+available (very wide networks near their initialisation, where the training dynamics are governed by
+the neural tangent kernel and are effectively linear), the eigenvalues of that kernel associated
+with high frequencies are far smaller than those associated with low ones, so gradient flow reduces
+the high-frequency components of the error at a correspondingly slower rate. Outside that regime the
+phenomenon is observed rather than proved. That gap between $\mathcal E_{\text{app}}$ and
+$\mathcal E_{\text{opt}}$ is the real subject of this course.
+
+\subsection*{Exercise \ref{ex:telgarsky}}
+
+\textbf{1--3.} See Lemmas \ref{lem:saw-deep}, \ref{lem:saw-pieces} and Theorem
+\ref{th:telgarsky}.
+
+\textbf{4.} Write $p(\Phi)$ for the number of affine pieces of a continuous piecewise affine
+function $\Phi : \R \to \R$. If $\Phi$ is piecewise affine with $p$ pieces and the next layer
+applies $n$ ReLU units coordinatewise after an affine map, then each piece of $\Phi$ can be
+subdivided into at most $n+1$ subpieces (each ReLU unit adds at most one breakpoint per piece).
+Hence, layer after layer,
+\[
+p \le \prod_{\ell=1}^{L-1}(n_\ell + 1).
+\]
+For a fixed total number of neurons $n = \sum_\ell n_\ell$, this product is largest when the
+$n_\ell$ are equal: $p \lesssim (n/(L-1) + 1)^{L-1}$, which grows \emph{exponentially} in $L$ and
+only \emph{polynomially} in the width. A one-hidden-layer network achieves $p \le n+1$: this is the
+exponential advantage of depth.
+
+\textbf{5.} The counting argument collapses outright: $\tanh$ is analytic, so every $\tanh$ network
+is analytic and has no ``pieces'' to count. Depth separation results do exist for smooth
+activations, but they are obtained by other means --- Vapnik--Chervonenkis complexity, or
+analyticity together with bounds on the number of zeros --- and we state no theorem about them here;
+comparing their strength with Theorem \ref{th:telgarsky} would require fixing a common notion of
+separation first, which we have not done. The honest conclusion is narrower and still worth drawing:
+piece-counting is a tool specific to piecewise affine activations, which is one reason the theory of
+ReLU networks is far more developed than that of $\tanh$ networks --- even though it is the latter
+that PINNs use.
+
+% ================================================================
+\newpage
+\fi
+
+\section*{References for this session}
+\addcontentsline{toc}{section}{References for this session}
+
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+\item A.~Pinkus, \emph{Approximation theory of the MLP model in neural networks}, Acta Numerica
+\textbf{8} (1999), 143--195. --- \emph{The reference for all the material in §§\,1--2.}
+\item R.~DeVore, B.~Hanin, G.~Petrova, \emph{Neural network approximation}, Acta Numerica
+\textbf{30} (2021), 327--444. --- \emph{A modern survey, very readable at MSc level.}
+\item G.~Cybenko, \emph{Approximation by superpositions of a sigmoidal function}, Mathematics of
+Control, Signals and Systems \textbf{2} (1989), 303--314.
+\item M.~Leshno, V.~Y.~Lin, A.~Pinkus, S.~Schocken, \emph{Multilayer feedforward networks with a
+nonpolynomial activation function can approximate any function}, Neural Networks \textbf{6} (1993),
+861--867.
+\item A.~R.~Barron, \emph{Universal approximation bounds for superpositions of a sigmoidal function},
+IEEE Transactions on Information Theory \textbf{39} (1993), 930--945.
+\item T.~De Ryck, S.~Lanthaler, S.~Mishra, \emph{On the approximation of functions by tanh neural
+networks}, Neural Networks \textbf{143} (2021), 732--750.
+\item I.~Gühring, G.~Kutyniok, P.~Petersen, \emph{Error bounds for approximations with deep ReLU
+neural networks in $W^{s,p}$ norms}, Analysis and Applications \textbf{18} (2020), 803--859.
+\item M.~Telgarsky, \emph{Benefits of depth in neural networks}, COLT 2016, 1517--1539.
+\item P.~Petersen, M.~Raslan, F.~Voigtlaender, \emph{Topological properties of the set of functions
+generated by neural networks of fixed size}, Foundations of Computational Mathematics \textbf{21}
+(2021), 375--444. --- \emph{The reference for Remark \ref{rem:nonclosed}.}
+\item S.~Mahan, E.~King, A.~Cloninger, \emph{Nonclosedness of sets of neural networks in Sobolev
+spaces}, Neural Networks \textbf{137} (2021), 85--96.
+\item P.~C.~Kainen, V.~K\r{u}rková, A.~Vogt, \emph{Approximation by neural networks is not
+continuous}, Neurocomputing \textbf{29} (1999), 47--56. --- \emph{On the absence of a continuous
+best-approximation selection; a different statement from non-closedness, with which it is often
+conflated.}
+\end{itemize}
+
+\end{document}
