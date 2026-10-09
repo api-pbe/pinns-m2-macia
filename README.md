@@ -33,7 +33,7 @@ removed, which is what gets printed for the session itself. See
 
 Open a lab in Google Colab — nothing to install:
 
-[![Session 1 lab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/USER/REPO/blob/main/session-01-approximation-class/lab/lab1-student.ipynb)
+[![Session 1 lab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/api-pbe/pinns-m2-macia/blob/main/session-01-approximation-class/lab/lab1-student.ipynb)
 
 Or locally:
 
