@@ -114,6 +114,34 @@ Send students the release URL. Solutions stay in this repository.
 
 ---
 
+## Starting the repository
+
+The history is already here, with two commits. To put it on GitHub as a **private**
+repository:
+
+```sh
+gh repo create pinns-m2-macia --private --source=. --remote=origin --push
+```
+
+or, without the GitHub CLI: create an empty private repository on github.com, then
+
+```sh
+git remote add origin git@github.com:<you>/pinns-m2-macia.git
+git push -u origin main
+```
+
+Check that Actions are enabled (Settings → Actions) and that the workflow has write
+permission for releases (Settings → Actions → General → Workflow permissions →
+*Read and write*). The release job needs it to publish.
+
+One caveat worth knowing before you tag: a release attached to a **private**
+repository is visible only to people with access to it. To hand students a public
+link you need either a second public repository that the workflow pushes `dist/`
+into, or GitHub Pages, or simply the release assets uploaded to your institutional
+space. Decide this once, before the first tag.
+
+---
+
 ## Licence
 
 Course text under **CC BY-NC-SA 4.0**, code under the **MIT licence**. See
